@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Tonight",
+      "hasCanvas": false,
+      "bodyTextLen": 3102,
+      "bodyTextHash": "9dd80b511913ac4c6f9f6dffffe7b002e56e785cfbb7f7220823267589f37d44",
+      "bodyTextPrefix": "Feed Deck Liked Taste Tonight 0 waiting The list stays on the le",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Tonight",
+      "hasCanvas": false,
+      "bodyTextLen": 2543,
+      "bodyTextHash": "365a73c85bee22b1139e7b6a7d57088da22c014a4c12be5a193866ec44180e69",
+      "bodyTextPrefix": "Feed Deck Liked Taste Tonight 0 waiting The card opens the deck.",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

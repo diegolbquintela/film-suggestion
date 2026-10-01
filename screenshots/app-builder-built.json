@@ -1,0 +1,40 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Tonight",
+      "hasCanvas": false,
+      "bodyTextLen": 2307,
+      "bodyTextHash": "8c58e4e9aa1c5710cc222d204251b987b8daa8e240271e654588afd98510c818",
+      "bodyTextPrefix": "Feed Deck Liked Taste Tonight 0 waiting The list stays on the le",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Tonight",
+      "hasCanvas": false,
+      "bodyTextLen": 1748,
+      "bodyTextHash": "8f9c610688d679e770d7157cbc09d58feee653bccdf481924a99396d852878b1",
+      "bodyTextPrefix": "Feed Deck Liked Taste Tonight 0 waiting The card opens the deck.",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": true,
+  "baselineReasons": [
+    "desktop: body text changed (2949 -> 2307 chars, hash mismatch)"
+  ]
+}
