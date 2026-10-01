@@ -1,7 +1,7 @@
 import { t as __exportAll } from "./rolldown-runtime-D7D4PA-g.mjs";
-import { n as TSS_SERVER_FUNCTION, r as getServerFnById, t as createServerFn } from "./ssr.mjs";
-import { a as VIBES, i as SEASONS, n as FAMILIES, t as FACETS } from "./facets-DOkKFDrl.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/grok-fns-jonoAxWt.js
+import { a as getServerFnById, i as TSS_SERVER_FUNCTION, r as createServerFn } from "./ssr.mjs";
+import { a as VIBES, c as authMiddleware, i as SEASONS, n as FAMILIES, t as FACETS } from "./facets-DseEWPMM.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/grok-fns-DP4us_s1.js
 var createSsrRpc = (functionId) => {
 	const url = "/_serverFn/" + functionId;
 	const serverFnMeta = { id: functionId };
@@ -93,7 +93,8 @@ function asSuggest(input) {
 		exclude: list(data?.exclude, 180),
 		recentYes: list(data?.recentYes, 8),
 		recentNo: list(data?.recentNo, 8),
-		anchors: list(data?.anchors, 40)
+		anchors: list(data?.anchors, 40),
+		watching: String(data?.watching ?? "").slice(0, 120)
 	};
 }
 function asWhy(input) {
@@ -147,16 +148,17 @@ function toWork(raw, taken) {
 		preachy: typeof row.preachy === "number" ? Math.min(1, Math.max(0, row.preachy)) : 0
 	};
 }
-var suggestMore = createServerFn({ method: "POST" }).validator(asSuggest).handler(createSsrRpc("ef8a625d68c05b2f6e299b5a3caa7e9f67df5d2c63f956a7af8c6b72e7d07441"));
-async function fetchWeeklyPicks(anchors, exclude) {
+var suggestMore = createServerFn({ method: "POST" }).validator(asSuggest).middleware([authMiddleware]).handler(createSsrRpc("ef8a625d68c05b2f6e299b5a3caa7e9f67df5d2c63f956a7af8c6b72e7d07441"));
+async function fetchWeeklyPicks(anchors, exclude, watching = "") {
 	const parsed = extractJson(await complete(SYSTEM, `Draw five real, already-released films or series that sit with this catalogue. Use the same families and tags, not a random genre mix.
 Anchors, tagged: ${anchors.join("; ") || "Lamb (grief), The Americans (spy), Goodfellas (crime), Severance (uncanny)"}.
+${watching ? `They are in the middle of ${watching}. Let one or two of the five sit near it. The rest stay with the catalogue.` : ""}
 Do not suggest any of these: ${exclude.join("; ")}.
 Return {"picks":[5 objects]} with keys name, year, kind (film|series), minutes, family (one of ${FAMILIES.join("|")}), vibes (subset of ${VIBES.join("|")}), seasons (subset of ${SEASONS.join("|")}), facets (object, keys ${FACETS.join("|")}, values 0 to 1), summary (2 sentences), why (tie to two anchors), vibeLine, preachy (0 to 1).`, 1600));
 	const taken = new Set(exclude.map((name) => name.toLowerCase()));
 	return (parsed.picks ?? []).map((pick) => toWork(pick, taken)).filter((pick) => Boolean(pick)).slice(0, 5);
 }
-var describeLiked = createServerFn({ method: "POST" }).validator((input) => {
+var describeLiked = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((input) => {
 	const data = input;
 	const name = String(data?.name ?? "").trim().slice(0, 120);
 	if (name.length < 2) throw new Error("Name the film.");
@@ -167,6 +169,6 @@ var describeLiked = createServerFn({ method: "POST" }).validator((input) => {
 		anchors
 	};
 }).handler(createSsrRpc("33d43aafc33a2e01838923d81b94203e5d29d1d50d4802e6b46b8bcdc266830b"));
-var sharpenWhy = createServerFn({ method: "POST" }).validator(asWhy).handler(createSsrRpc("d2b01130f193a8dbc658e918123dd34a41db355305022acf7664bfe02a669321"));
+var sharpenWhy = createServerFn({ method: "POST" }).validator(asWhy).middleware([authMiddleware]).handler(createSsrRpc("d2b01130f193a8dbc658e918123dd34a41db355305022acf7664bfe02a669321"));
 //#endregion
 export { createSsrRpc as a, suggestMore as i, grok_fns_exports as n, sharpenWhy as r, describeLiked as t };

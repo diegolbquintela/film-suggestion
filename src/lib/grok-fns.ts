@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
 import { FAMILIES, FACETS, SEASONS, VIBES, type Family, type Season, type Vibe } from "@/lib/facets";
 import type { Work } from "@/lib/work";
 
@@ -152,6 +153,7 @@ function toWork(raw: unknown, taken: Set<string>): Work | null {
 
 export const suggestMore = createServerFn({ method: "POST" })
   .validator(asSuggest)
+  .middleware([authMiddleware])
   .handler(async ({ data }) => {
     try {
       const text = await complete(
@@ -191,6 +193,7 @@ Return {"picks":[5 objects]} with keys name, year, kind (film|series), minutes, 
 }
 
 export const describeLiked = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const data = input as { name?: unknown; note?: unknown; anchors?: unknown } | null;
     const name = String(data?.name ?? "").trim().slice(0, 120);
@@ -219,6 +222,7 @@ Return one JSON object, not a list, for this real released title only. Keys: nam
 
 export const sharpenWhy = createServerFn({ method: "POST" })
   .validator(asWhy)
+  .middleware([authMiddleware])
   .handler(async ({ data }) => {
     try {
       const text = await complete(

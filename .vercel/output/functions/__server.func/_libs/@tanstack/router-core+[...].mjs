@@ -247,7 +247,7 @@ var RawStreamJSONDeserializePlugin = /* @__PURE__ */ createPlugin({
 	}
 });
 //#endregion
-//#region node_modules/seroval-plugins/dist/web-CWqRG00W.js
+//#region node_modules/seroval-plugins/dist/web-CDQeyEaf.js
 var READABLE_STREAM_FACTORY = {};
 var READABLE_STREAM_FACTORY_CONSTRUCTOR = (stream) => new ReadableStream({ start(controller) {
 	stream.on({

@@ -15,7 +15,8 @@ var grokOgIdentity = { "site": {
 	"title": "Tonight",
 	"card": "custom",
 	"color": "111111",
-	"image": "/og.jpg"
+	"image": "/og.jpg",
+	"banner": "/x-banner.jpg"
 } };
 //#endregion
 //#region scripts/grok-pwa-shared.mjs

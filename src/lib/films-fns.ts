@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
 import { FAMILIES, FACETS, SEASONS, VIBES, type Family, type Season, type Vibe } from "@/lib/facets";
 import type { Work } from "@/lib/work";
 
@@ -54,10 +55,12 @@ function parsePayload(payload: unknown): Work | null {
   }
 }
 
-async function readSplit(): Promise<{ films: Work[]; incoming: Work[] }> {
+async function readSplit(userId: string): Promise<{ films: Work[]; incoming: Work[] }> {
   const { getSql } = await import("@/lib/db");
   const sql = await getSql();
-  const rows = await sql<{ payload: string; source: string }>`select payload, source from films order by created_at asc`;
+  const rows = await sql<{ payload: string; source: string }>`
+    select payload, source from films where user_id = ${userId} order by created_at asc
+  `;
   const films: Work[] = [];
   const incoming: Work[] = [];
   const seen = new Set<string>();
@@ -71,25 +74,31 @@ async function readSplit(): Promise<{ films: Work[]; incoming: Work[] }> {
   return { films, incoming };
 }
 
-async function ensureSeed(): Promise<void> {
+async function ensureSeed(userId: string): Promise<void> {
   const { getSql } = await import("@/lib/db");
   const { CATALOG } = await import("@/lib/catalog");
   const sql = await getSql();
-  const counts = await sql<{ n: number }>`select count(*)::int as n from films`;
+  const counts = await sql<{ n: number }>`select count(*)::int as n from films where user_id = ${userId}`;
   if ((counts[0]?.n ?? 0) > 0) return;
   for (const work of CATALOG) {
-    await sql`insert into films (id, name, payload, source) values (${work.id}, ${work.name}, ${JSON.stringify(work)}, 'seed') on conflict (id) do nothing`;
+    await sql`
+      insert into films (user_id, id, name, payload, source)
+      values (${userId}, ${work.id}, ${work.name}, ${JSON.stringify(work)}, 'seed')
+      on conflict (user_id, id) do nothing
+    `;
   }
 }
 
-export const listFilms = createServerFn({ method: "GET" }).handler(async () => {
-  try {
-    await ensureSeed();
-    return { ok: true as const, ...(await readSplit()) };
-  } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : "The shelf didn't load." };
-  }
-});
+export const listFilms = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    try {
+      await ensureSeed(context.userId);
+      return { ok: true as const, ...(await readSplit(context.userId)) };
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error ? error.message : "The shelf didn't load." };
+    }
+  });
 
 function asAdd(input: unknown): { works: Work[]; source: "grok" | "liked" | "incoming" } {
   const data = input as { works?: unknown; source?: unknown } | null;
@@ -102,19 +111,24 @@ function asAdd(input: unknown): { works: Work[]; source: "grok" | "liked" | "inc
 
 export const addFilms = createServerFn({ method: "POST" })
   .validator(asAdd)
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
-    await ensureSeed();
-    const existing = await sql<{ name: string }>`select name from films`;
+    await ensureSeed(context.userId);
+    const existing = await sql<{ name: string }>`select name from films where user_id = ${context.userId}`;
     const have = new Set(existing.map((row) => row.name.toLowerCase()));
     for (const work of data.works) {
       const key = work.name.toLowerCase();
       if (have.has(key)) continue;
-      await sql`insert into films (id, name, payload, source) values (${work.id}, ${work.name}, ${JSON.stringify(work)}, ${data.source}) on conflict (id) do nothing`;
+      await sql`
+        insert into films (user_id, id, name, payload, source)
+        values (${context.userId}, ${work.id}, ${work.name}, ${JSON.stringify(work)}, ${data.source})
+        on conflict (user_id, id) do nothing
+      `;
       have.add(key);
     }
-    return { ok: true as const, ...(await readSplit()) };
+    return { ok: true as const, ...(await readSplit(context.userId)) };
   });
 
 export const removeFilm = createServerFn({ method: "POST" })
@@ -123,11 +137,29 @@ export const removeFilm = createServerFn({ method: "POST" })
     if (!id) throw new Error("Missing title");
     return { id };
   })
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
-    await sql`delete from films where id = ${data.id}`;
-    return { ok: true as const, ...(await readSplit()) };
+    await sql`delete from films where id = ${data.id} and user_id = ${context.userId}`;
+    return { ok: true as const, ...(await readSplit(context.userId)) };
+  });
+
+export const dropFilms = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const ids = Array.isArray((input as { ids?: unknown } | null)?.ids)
+      ? (input as { ids: unknown[] }).ids.map((id) => String(id).slice(0, 80)).filter(Boolean).slice(0, 200)
+      : [];
+    return { ids };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    const { getSql } = await import("@/lib/db");
+    const sql = await getSql();
+    for (const id of data.ids) {
+      await sql`delete from films where id = ${id} and user_id = ${context.userId}`;
+    }
+    return { ok: true as const, ...(await readSplit(context.userId)) };
   });
 
 export const promoteFilm = createServerFn({ method: "POST" })
@@ -136,11 +168,12 @@ export const promoteFilm = createServerFn({ method: "POST" })
     if (!id) throw new Error("Missing title");
     return { id };
   })
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
-    await sql`update films set source = 'deck' where id = ${data.id} and source = 'incoming'`;
-    return { ok: true as const, ...(await readSplit()) };
+    await sql`update films set source = 'deck' where id = ${data.id} and user_id = ${context.userId} and source = 'incoming'`;
+    return { ok: true as const, ...(await readSplit(context.userId)) };
   });
 
 export const restoreFilm = createServerFn({ method: "POST" })
@@ -149,12 +182,17 @@ export const restoreFilm = createServerFn({ method: "POST" })
     if (!work) throw new Error("Missing title");
     return { work };
   })
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     const source = data.work.loved ? "seed" : "deck";
-    await sql`insert into films (id, name, payload, source) values (${data.work.id}, ${data.work.name}, ${JSON.stringify(data.work)}, ${source}) on conflict (id) do nothing`;
-    return { ok: true as const, ...(await readSplit()) };
+    await sql`
+      insert into films (user_id, id, name, payload, source)
+      values (${context.userId}, ${data.work.id}, ${data.work.name}, ${JSON.stringify(data.work)}, ${source})
+      on conflict (user_id, id) do nothing
+    `;
+    return { ok: true as const, ...(await readSplit(context.userId)) };
   });
 
 export const pullWeekly = createServerFn({ method: "POST" })
@@ -162,46 +200,53 @@ export const pullWeekly = createServerFn({ method: "POST" })
     const watching = String((input as { watching?: unknown } | null)?.watching ?? "").trim().slice(0, 120);
     return { watching };
   })
-  .handler(async ({ data }) => {
-  try {
-    await ensureSeed();
-    const { getSql } = await import("@/lib/db");
-    const sql = await getSql();
-    const recent = await sql<{ id: string; added: number }>`
-      select id, added from suggest_log
-      where ran_at > now() - interval '7 days'
-      order by ran_at desc
-      limit 1
-    `;
-    const last = recent[0];
-    if (last && last.added > 0) return { ok: true as const, added: 0, ...(await readSplit()) };
-    if (last) await sql`delete from suggest_log where id = ${last.id}`;
-
-    const claim = `week-${Date.now()}`;
-    await sql`insert into suggest_log (id, added) values (${claim}, 0)`;
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
     try {
-      const rows = await sql<{ payload: string; source: string }>`select payload, source from films where source <> 'incoming'`;
-      const names: string[] = [];
-      const anchors: string[] = [];
-      for (const row of rows) {
-        const work = parsePayload(row.payload);
-        if (!work) continue;
-        names.push(work.name);
-        if (work.loved || row.source === "liked") anchors.push(`${work.name} (${work.family})`);
+      await ensureSeed(context.userId);
+      const { getSql } = await import("@/lib/db");
+      const sql = await getSql();
+      const recent = await sql<{ id: string; added: number }>`
+        select id, added from suggest_log
+        where user_id = ${context.userId} and ran_at > now() - interval '7 days'
+        order by ran_at desc
+        limit 1
+      `;
+      const last = recent[0];
+      if (last && last.added > 0) return { ok: true as const, added: 0, ...(await readSplit(context.userId)) };
+      if (last) await sql`delete from suggest_log where id = ${last.id} and user_id = ${context.userId}`;
+
+      const claim = `week-${Date.now()}`;
+      await sql`insert into suggest_log (user_id, id, added) values (${context.userId}, ${claim}, 0)`;
+      try {
+        const rows = await sql<{ payload: string; source: string }>`
+          select payload, source from films where user_id = ${context.userId} and source <> 'incoming'
+        `;
+        const names: string[] = [];
+        const anchors: string[] = [];
+        for (const row of rows) {
+          const work = parsePayload(row.payload);
+          if (!work) continue;
+          names.push(work.name);
+          if (work.loved || row.source === "liked") anchors.push(`${work.name} (${work.family})`);
+        }
+        const { fetchWeeklyPicks } = await import("@/lib/grok-fns");
+        const picks = await fetchWeeklyPicks(anchors.slice(0, 36), names, data.watching);
+        if (!picks.length) throw new Error("Grok didn't name anything usable.");
+        for (const work of picks) {
+          await sql`
+            insert into films (user_id, id, name, payload, source)
+            values (${context.userId}, ${work.id}, ${work.name}, ${JSON.stringify(work)}, 'incoming')
+            on conflict (user_id, id) do nothing
+          `;
+        }
+        await sql`update suggest_log set added = ${picks.length} where id = ${claim} and user_id = ${context.userId}`;
+        return { ok: true as const, added: picks.length, ...(await readSplit(context.userId)) };
+      } catch (error) {
+        await sql`delete from suggest_log where id = ${claim} and user_id = ${context.userId}`;
+        throw error;
       }
-      const { fetchWeeklyPicks } = await import("@/lib/grok-fns");
-      const picks = await fetchWeeklyPicks(anchors.slice(0, 36), names, data.watching);
-      if (!picks.length) throw new Error("Grok didn't name anything usable.");
-      for (const work of picks) {
-        await sql`insert into films (id, name, payload, source) values (${work.id}, ${work.name}, ${JSON.stringify(work)}, 'incoming') on conflict (id) do nothing`;
-      }
-      await sql`update suggest_log set added = ${picks.length} where id = ${claim}`;
-      return { ok: true as const, added: picks.length, ...(await readSplit()) };
     } catch (error) {
-      await sql`delete from suggest_log where id = ${claim}`;
-      throw error;
+      return { ok: false as const, error: error instanceof Error ? error.message : "This week's five didn't land." };
     }
-  } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : "This week's five didn't land." };
-  }
-});
+  });

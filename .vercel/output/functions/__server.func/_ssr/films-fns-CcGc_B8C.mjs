@@ -1,7 +1,7 @@
-import { t as createServerFn } from "./ssr.mjs";
-import { t as createServerRpc } from "./createServerRpc-A6pJPYTF.mjs";
-import { a as VIBES, i as SEASONS, n as FAMILIES, t as FACETS } from "./facets-DOkKFDrl.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/films-fns-D-WqQ6Sx.js
+import { r as createServerFn } from "./ssr.mjs";
+import { t as createServerRpc } from "./createServerRpc-CcvdN_gc.mjs";
+import { a as VIBES, c as authMiddleware, i as SEASONS, n as FAMILIES, t as FACETS } from "./facets-DseEWPMM.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/films-fns-CcGc_B8C.js
 function asWork(raw, keepLoved) {
 	if (!raw || typeof raw !== "object") return null;
 	const row = raw;
@@ -48,9 +48,11 @@ function parsePayload(payload) {
 		return null;
 	}
 }
-async function readSplit() {
-	const { getSql } = await import("./db-UKQ_4fXg.mjs");
-	const rows = await (await getSql())`select payload, source from films order by created_at asc`;
+async function readSplit(userId) {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
+	const rows = await (await getSql())`
+    select payload, source from films where user_id = ${userId} order by created_at asc
+  `;
 	const films = [];
 	const incoming = [];
 	const seen = /* @__PURE__ */ new Set();
@@ -66,24 +68,28 @@ async function readSplit() {
 		incoming
 	};
 }
-async function ensureSeed() {
-	const { getSql } = await import("./db-UKQ_4fXg.mjs");
+async function ensureSeed(userId) {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
 	const { CATALOG } = await import("./catalog-B2tadS0a.mjs").then((n) => n.t);
 	const sql = await getSql();
-	if (((await sql`select count(*)::int as n from films`)[0]?.n ?? 0) > 0) return;
-	for (const work of CATALOG) await sql`insert into films (id, name, payload, source) values (${work.id}, ${work.name}, ${JSON.stringify(work)}, 'seed') on conflict (id) do nothing`;
+	if (((await sql`select count(*)::int as n from films where user_id = ${userId}`)[0]?.n ?? 0) > 0) return;
+	for (const work of CATALOG) await sql`
+      insert into films (user_id, id, name, payload, source)
+      values (${userId}, ${work.id}, ${work.name}, ${JSON.stringify(work)}, 'seed')
+      on conflict (user_id, id) do nothing
+    `;
 }
 var listFilms_createServerFn_handler = createServerRpc({
 	id: "6de1c97ec6c07d1e326142eadaf64c3426322059b258ad4b0c4fefc0dde97cb6",
 	name: "listFilms",
 	filename: "src/lib/films-fns.ts"
 }, (opts) => listFilms.__executeServer(opts));
-var listFilms = createServerFn({ method: "GET" }).handler(listFilms_createServerFn_handler, async () => {
+var listFilms = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(listFilms_createServerFn_handler, async ({ context }) => {
 	try {
-		await ensureSeed();
+		await ensureSeed(context.userId);
 		return {
 			ok: true,
-			...await readSplit()
+			...await readSplit(context.userId)
 		};
 	} catch (error) {
 		return {
@@ -107,21 +113,25 @@ var addFilms_createServerFn_handler = createServerRpc({
 	name: "addFilms",
 	filename: "src/lib/films-fns.ts"
 }, (opts) => addFilms.__executeServer(opts));
-var addFilms = createServerFn({ method: "POST" }).validator(asAdd).handler(addFilms_createServerFn_handler, async ({ data }) => {
-	const { getSql } = await import("./db-UKQ_4fXg.mjs");
+var addFilms = createServerFn({ method: "POST" }).validator(asAdd).middleware([authMiddleware]).handler(addFilms_createServerFn_handler, async ({ data, context }) => {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
 	const sql = await getSql();
-	await ensureSeed();
-	const existing = await sql`select name from films`;
+	await ensureSeed(context.userId);
+	const existing = await sql`select name from films where user_id = ${context.userId}`;
 	const have = new Set(existing.map((row) => row.name.toLowerCase()));
 	for (const work of data.works) {
 		const key = work.name.toLowerCase();
 		if (have.has(key)) continue;
-		await sql`insert into films (id, name, payload, source) values (${work.id}, ${work.name}, ${JSON.stringify(work)}, ${data.source}) on conflict (id) do nothing`;
+		await sql`
+        insert into films (user_id, id, name, payload, source)
+        values (${context.userId}, ${work.id}, ${work.name}, ${JSON.stringify(work)}, ${data.source})
+        on conflict (user_id, id) do nothing
+      `;
 		have.add(key);
 	}
 	return {
 		ok: true,
-		...await readSplit()
+		...await readSplit(context.userId)
 	};
 });
 var removeFilm_createServerFn_handler = createServerRpc({
@@ -133,12 +143,28 @@ var removeFilm = createServerFn({ method: "POST" }).validator((input) => {
 	const id = String(input?.id ?? "").trim().slice(0, 80);
 	if (!id) throw new Error("Missing title");
 	return { id };
-}).handler(removeFilm_createServerFn_handler, async ({ data }) => {
-	const { getSql } = await import("./db-UKQ_4fXg.mjs");
-	await (await getSql())`delete from films where id = ${data.id}`;
+}).middleware([authMiddleware]).handler(removeFilm_createServerFn_handler, async ({ data, context }) => {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
+	await (await getSql())`delete from films where id = ${data.id} and user_id = ${context.userId}`;
 	return {
 		ok: true,
-		...await readSplit()
+		...await readSplit(context.userId)
+	};
+});
+var dropFilms_createServerFn_handler = createServerRpc({
+	id: "41939bf958021b8b76a8b1ea231dcd0d35024fba6056295ed50a0f800e879971",
+	name: "dropFilms",
+	filename: "src/lib/films-fns.ts"
+}, (opts) => dropFilms.__executeServer(opts));
+var dropFilms = createServerFn({ method: "POST" }).validator((input) => {
+	return { ids: Array.isArray(input?.ids) ? input.ids.map((id) => String(id).slice(0, 80)).filter(Boolean).slice(0, 200) : [] };
+}).middleware([authMiddleware]).handler(dropFilms_createServerFn_handler, async ({ data, context }) => {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
+	const sql = await getSql();
+	for (const id of data.ids) await sql`delete from films where id = ${id} and user_id = ${context.userId}`;
+	return {
+		ok: true,
+		...await readSplit(context.userId)
 	};
 });
 var promoteFilm_createServerFn_handler = createServerRpc({
@@ -150,12 +176,12 @@ var promoteFilm = createServerFn({ method: "POST" }).validator((input) => {
 	const id = String(input?.id ?? "").trim().slice(0, 80);
 	if (!id) throw new Error("Missing title");
 	return { id };
-}).handler(promoteFilm_createServerFn_handler, async ({ data }) => {
-	const { getSql } = await import("./db-UKQ_4fXg.mjs");
-	await (await getSql())`update films set source = 'deck' where id = ${data.id} and source = 'incoming'`;
+}).middleware([authMiddleware]).handler(promoteFilm_createServerFn_handler, async ({ data, context }) => {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
+	await (await getSql())`update films set source = 'deck' where id = ${data.id} and user_id = ${context.userId} and source = 'incoming'`;
 	return {
 		ok: true,
-		...await readSplit()
+		...await readSplit(context.userId)
 	};
 });
 var restoreFilm_createServerFn_handler = createServerRpc({
@@ -167,14 +193,18 @@ var restoreFilm = createServerFn({ method: "POST" }).validator((input) => {
 	const work = asWork(input?.work, true);
 	if (!work) throw new Error("Missing title");
 	return { work };
-}).handler(restoreFilm_createServerFn_handler, async ({ data }) => {
-	const { getSql } = await import("./db-UKQ_4fXg.mjs");
+}).middleware([authMiddleware]).handler(restoreFilm_createServerFn_handler, async ({ data, context }) => {
+	const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
 	const sql = await getSql();
 	const source = data.work.loved ? "seed" : "deck";
-	await sql`insert into films (id, name, payload, source) values (${data.work.id}, ${data.work.name}, ${JSON.stringify(data.work)}, ${source}) on conflict (id) do nothing`;
+	await sql`
+      insert into films (user_id, id, name, payload, source)
+      values (${context.userId}, ${data.work.id}, ${data.work.name}, ${JSON.stringify(data.work)}, ${source})
+      on conflict (user_id, id) do nothing
+    `;
 	return {
 		ok: true,
-		...await readSplit()
+		...await readSplit(context.userId)
 	};
 });
 var pullWeekly_createServerFn_handler = createServerRpc({
@@ -182,27 +212,31 @@ var pullWeekly_createServerFn_handler = createServerRpc({
 	name: "pullWeekly",
 	filename: "src/lib/films-fns.ts"
 }, (opts) => pullWeekly.__executeServer(opts));
-var pullWeekly = createServerFn({ method: "POST" }).handler(pullWeekly_createServerFn_handler, async () => {
+var pullWeekly = createServerFn({ method: "POST" }).validator((input) => {
+	return { watching: String(input?.watching ?? "").trim().slice(0, 120) };
+}).middleware([authMiddleware]).handler(pullWeekly_createServerFn_handler, async ({ data, context }) => {
 	try {
-		await ensureSeed();
-		const { getSql } = await import("./db-UKQ_4fXg.mjs");
+		await ensureSeed(context.userId);
+		const { getSql } = await import("./db-CVbY3AQD.mjs").then((n) => n.t).then((n) => n.t);
 		const sql = await getSql();
 		const last = (await sql`
-      select id, added from suggest_log
-      where ran_at > now() - interval '7 days'
-      order by ran_at desc
-      limit 1
-    `)[0];
+        select id, added from suggest_log
+        where user_id = ${context.userId} and ran_at > now() - interval '7 days'
+        order by ran_at desc
+        limit 1
+      `)[0];
 		if (last && last.added > 0) return {
 			ok: true,
 			added: 0,
-			...await readSplit()
+			...await readSplit(context.userId)
 		};
-		if (last) await sql`delete from suggest_log where id = ${last.id}`;
+		if (last) await sql`delete from suggest_log where id = ${last.id} and user_id = ${context.userId}`;
 		const claim = `week-${Date.now()}`;
-		await sql`insert into suggest_log (id, added) values (${claim}, 0)`;
+		await sql`insert into suggest_log (user_id, id, added) values (${context.userId}, ${claim}, 0)`;
 		try {
-			const rows = await sql`select payload, source from films where source <> 'incoming'`;
+			const rows = await sql`
+          select payload, source from films where user_id = ${context.userId} and source <> 'incoming'
+        `;
 			const names = [];
 			const anchors = [];
 			for (const row of rows) {
@@ -211,18 +245,22 @@ var pullWeekly = createServerFn({ method: "POST" }).handler(pullWeekly_createSer
 				names.push(work.name);
 				if (work.loved || row.source === "liked") anchors.push(`${work.name} (${work.family})`);
 			}
-			const { fetchWeeklyPicks } = await import("./grok-fns-jonoAxWt.mjs").then((n) => n.n);
-			const picks = await fetchWeeklyPicks(anchors.slice(0, 36), names);
+			const { fetchWeeklyPicks } = await import("./grok-fns-DP4us_s1.mjs").then((n) => n.n);
+			const picks = await fetchWeeklyPicks(anchors.slice(0, 36), names, data.watching);
 			if (!picks.length) throw new Error("Grok didn't name anything usable.");
-			for (const work of picks) await sql`insert into films (id, name, payload, source) values (${work.id}, ${work.name}, ${JSON.stringify(work)}, 'incoming') on conflict (id) do nothing`;
-			await sql`update suggest_log set added = ${picks.length} where id = ${claim}`;
+			for (const work of picks) await sql`
+            insert into films (user_id, id, name, payload, source)
+            values (${context.userId}, ${work.id}, ${work.name}, ${JSON.stringify(work)}, 'incoming')
+            on conflict (user_id, id) do nothing
+          `;
+			await sql`update suggest_log set added = ${picks.length} where id = ${claim} and user_id = ${context.userId}`;
 			return {
 				ok: true,
 				added: picks.length,
-				...await readSplit()
+				...await readSplit(context.userId)
 			};
 		} catch (error) {
-			await sql`delete from suggest_log where id = ${claim}`;
+			await sql`delete from suggest_log where id = ${claim} and user_id = ${context.userId}`;
 			throw error;
 		}
 	} catch (error) {
@@ -233,4 +271,4 @@ var pullWeekly = createServerFn({ method: "POST" }).handler(pullWeekly_createSer
 	}
 });
 //#endregion
-export { addFilms_createServerFn_handler, listFilms_createServerFn_handler, promoteFilm_createServerFn_handler, pullWeekly_createServerFn_handler, removeFilm_createServerFn_handler, restoreFilm_createServerFn_handler };
+export { addFilms_createServerFn_handler, dropFilms_createServerFn_handler, listFilms_createServerFn_handler, promoteFilm_createServerFn_handler, pullWeekly_createServerFn_handler, removeFilm_createServerFn_handler, restoreFilm_createServerFn_handler };

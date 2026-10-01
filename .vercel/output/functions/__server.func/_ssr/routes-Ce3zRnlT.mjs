@@ -2,12 +2,16 @@ import { o as __toESM } from "../_runtime.mjs";
 import { n as create, t as persist } from "../_libs/zustand.mjs";
 import { b as require_jsx_runtime, q as require_react } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as mergeWorks, r as useShelf } from "./catalog-B2tadS0a.mjs";
-import { t as createServerFn } from "./ssr.mjs";
-import { a as VIBES, c as blend, d as hash, f as scale, i as SEASONS, l as clampVec, m as zero, n as FAMILIES, o as VIBE_LABEL, p as vec, r as FAMILY_LABEL, s as add, t as FACETS, u as cosine } from "./facets-DOkKFDrl.mjs";
-import { a as createSsrRpc, i as suggestMore, r as sharpenWhy, t as describeLiked } from "./grok-fns-jonoAxWt.mjs";
+import { i as signOut, r as signIn, t as authClient } from "./client-IWHfIGH2.mjs";
+import { r as createServerFn } from "./ssr.mjs";
+import { a as VIBES, c as authMiddleware, d as cosine, f as hash, h as zero, i as SEASONS, l as blend, m as vec, n as FAMILIES, o as VIBE_LABEL, p as scale, r as FAMILY_LABEL, s as add, t as FACETS, u as clampVec } from "./facets-DseEWPMM.mjs";
+import { a as createSsrRpc, i as suggestMore, r as sharpenWhy, t as describeLiked } from "./grok-fns-DP4us_s1.mjs";
+import { a as hasGateSessionMarker, t as GROK_PROVIDERS } from "./server-BL0prBGb.mjs";
+import { t as LoginPanel } from "./login-panel-BR_vSHhJ.mjs";
+import { n as emptyTaste, r as tasteHasChoices, t as coerceTaste } from "./taste-BiVivYv-.mjs";
 import { t as clsx } from "../_libs/clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-Dow0X4AZ.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-Ce3zRnlT.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var DAY = 864e5;
@@ -69,7 +73,7 @@ function nearest(work, anchors) {
 		score: cosine(mine, vec(anchor.facets))
 	})).sort((a, b) => b.score - a.score).slice(0, 2);
 }
-function scoreWork(work, life, taste, vibe, season, fatigue, anchors, key) {
+function scoreWork(work, life, taste, vibe, season, fatigue, anchors, key, watching) {
 	const features = vec(work.facets);
 	const anchorScores = anchors.filter((anchor) => anchor.id !== work.id).map((anchor) => cosine(features, vec(anchor.facets))).sort((a, b) => b - a);
 	const best = anchorScores[0] ?? 0;
@@ -85,6 +89,7 @@ function scoreWork(work, life, taste, vibe, season, fatigue, anchors, key) {
 	if (exactSeason) raw += .08;
 	else if (anySeason) raw += .03;
 	raw -= work.preachy * .15;
+	if (watching && watching.id !== work.id) raw += Math.max(0, cosine(features, vec(watching.facets))) * .1;
 	const tired = fatigue[work.family] ?? 0;
 	if (tired >= 3) raw *= .7;
 	else if (tired >= 2) raw *= .88;
@@ -123,7 +128,7 @@ function buildDeck(input) {
 	const anchors = works.filter((work) => !work.hidden && !input.demoted.includes(work.id) && (work.loved || likedSet.has(work.id)));
 	const blocked = /* @__PURE__ */ new Set([...input.never, ...input.queueIds]);
 	const scored = works.filter((work) => !work.hidden && !blocked.has(work.id)).filter((work) => (input.laterUntil[work.id] ?? 0) <= input.now).map((work) => {
-		const item = scoreWork(work, life, taste, input.vibe, season, fatigue, anchors, input.key);
+		const item = scoreWork(work, life, taste, input.vibe, season, fatigue, anchors, input.key, input.watching);
 		if (wish.has(work.id)) {
 			item.raw += .12;
 			item.tonight = toScore(item.raw);
@@ -301,7 +306,7 @@ function asWork(raw, keepLoved) {
 		preachy: typeof row.preachy === "number" ? Math.min(1, Math.max(0, row.preachy)) : 0
 	};
 }
-var listFilms = createServerFn({ method: "GET" }).handler(createSsrRpc("6de1c97ec6c07d1e326142eadaf64c3426322059b258ad4b0c4fefc0dde97cb6"));
+var listFilms = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(createSsrRpc("6de1c97ec6c07d1e326142eadaf64c3426322059b258ad4b0c4fefc0dde97cb6"));
 function asAdd(input) {
 	const data = input;
 	if (!Array.isArray(data?.works)) throw new Error("No films");
@@ -312,23 +317,139 @@ function asAdd(input) {
 		source: data?.source === "liked" || data?.source === "incoming" ? data.source : "grok"
 	};
 }
-var addFilms = createServerFn({ method: "POST" }).validator(asAdd).handler(createSsrRpc("5a366907efd84b4c47123901bcffdddf21c6d1ffbaa5b19b5f31787db60fe370"));
+var addFilms = createServerFn({ method: "POST" }).validator(asAdd).middleware([authMiddleware]).handler(createSsrRpc("5a366907efd84b4c47123901bcffdddf21c6d1ffbaa5b19b5f31787db60fe370"));
 var removeFilm = createServerFn({ method: "POST" }).validator((input) => {
 	const id = String(input?.id ?? "").trim().slice(0, 80);
 	if (!id) throw new Error("Missing title");
 	return { id };
-}).handler(createSsrRpc("3d82db6629a086bcd26f236048aab17c643bc9a5c192c89ca026e0793eb33714"));
+}).middleware([authMiddleware]).handler(createSsrRpc("3d82db6629a086bcd26f236048aab17c643bc9a5c192c89ca026e0793eb33714"));
+var dropFilms = createServerFn({ method: "POST" }).validator((input) => {
+	return { ids: Array.isArray(input?.ids) ? input.ids.map((id) => String(id).slice(0, 80)).filter(Boolean).slice(0, 200) : [] };
+}).middleware([authMiddleware]).handler(createSsrRpc("41939bf958021b8b76a8b1ea231dcd0d35024fba6056295ed50a0f800e879971"));
 var promoteFilm = createServerFn({ method: "POST" }).validator((input) => {
 	const id = String(input?.id ?? "").trim().slice(0, 80);
 	if (!id) throw new Error("Missing title");
 	return { id };
-}).handler(createSsrRpc("82fa17bf44e0ec2de7dad75ad7edbf99e5c75f673aea3f52df84acf5a73a1a5f"));
+}).middleware([authMiddleware]).handler(createSsrRpc("82fa17bf44e0ec2de7dad75ad7edbf99e5c75f673aea3f52df84acf5a73a1a5f"));
 var restoreFilm = createServerFn({ method: "POST" }).validator((input) => {
 	const work = asWork(input?.work, true);
 	if (!work) throw new Error("Missing title");
 	return { work };
-}).handler(createSsrRpc("3da13f1c2786eddcde7e7740ee0d0b1246aadc4dc2fd86933d556415d2474906"));
-var pullWeekly = createServerFn({ method: "POST" }).handler(createSsrRpc("849d378b16d7e80beed1754b1e6508b7461b9b33df8ed840b140fb78af921164"));
+}).middleware([authMiddleware]).handler(createSsrRpc("3da13f1c2786eddcde7e7740ee0d0b1246aadc4dc2fd86933d556415d2474906"));
+var pullWeekly = createServerFn({ method: "POST" }).validator((input) => {
+	return { watching: String(input?.watching ?? "").trim().slice(0, 120) };
+}).middleware([authMiddleware]).handler(createSsrRpc("849d378b16d7e80beed1754b1e6508b7461b9b33df8ed840b140fb78af921164"));
+function resolveSignInGateState(input) {
+	if (input.isPending) return "pending";
+	return input.hasUser ? "signed_in" : "signed_out";
+}
+/**
+* Current user + loading state. Same behavior in live preview and when deployed:
+*   - Auth enabled -> the real signed-in user; `user` is `null` while
+*                            the session resolves (`isPending: true`) and when
+*                            signed out (`isPending: false`). Session comes from
+*                            Better Auth `useSession()` → `/api/auth/get-session`
+*                            (cookie when deployed; bearer in live preview).
+*   - Auth disabled (`VITE_AUTH_ENABLED=false`) -> `DEV_USER`, never pending.
+*
+* Protect a route by waiting out `isPending` before acting on `user` —
+* redirecting on `user: null` alone bounces signed-in visitors to sign-in on
+* every hard reload:
+*
+*   import { RedirectToSignIn } from "@/lib/auth/gates";
+*   const { user, isPending } = useCurrentUserState();
+*   if (isPending) return null;              // still resolving — don't redirect yet
+*   if (!user) return <RedirectToSignIn />;  // definitely signed out
+*
+* `authEnabled` is a module-level constant fixed at load, so the guarded hook
+* call keeps a stable hook order across every render of a given component.
+*/
+function useCurrentUserState() {
+	const { data, isPending } = authClient.useSession();
+	const user = data?.user;
+	return {
+		user: user ? {
+			id: user.id,
+			displayName: user.name ?? null,
+			primaryEmail: user.email ?? null,
+			profileImageUrl: user.image ?? null,
+			isDevFallback: false
+		} : null,
+		isPending
+	};
+}
+/**
+* Convenience view of `useCurrentUserState().user` for display (e.g.
+* `user?.displayName ?? "Guest"`). NOTE: `null` means *loading OR signed out* —
+* for redirects/guards use `useCurrentUserState()` and check `isPending`.
+*/
+function useCurrentUser() {
+	return useCurrentUserState().user;
+}
+var subscribeToNothing = () => () => {};
+var noGateSessionOnServer = () => false;
+function SignInGate({ children, fallback }) {
+	const { user, isPending } = useCurrentUserState();
+	const state = resolveSignInGateState({
+		isPending,
+		hasUser: user !== null
+	});
+	if (state === "pending") return null;
+	if (state === "signed_in") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: fallback ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignInButtons, {}) });
+}
+function SignInButtons() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "flex w-full max-w-sm flex-col gap-2",
+		children: GROK_PROVIDERS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+			type: "button",
+			onClick: () => signIn(p.providerId, { callbackURL: "/" }),
+			className: "w-full cursor-pointer rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900",
+			children: ["Continue with ", p.label]
+		}, p.providerId))
+	});
+}
+/**
+* Minimal signed-in identity chip + sign-out. Restyle freely (see the
+* `design-ui` skill). Sign-out is only shown when auth is enabled (the
+* disabled-auth dev user has nothing to sign out of) and the session is not
+* gate-materialized — behind the gate the next request signs the viewer
+* straight back in, so a sign-out control there is a broken loop.
+*/
+function UserButton() {
+	const user = useCurrentUser();
+	const [signingOut, setSigningOut] = (0, import_react.useState)(false);
+	const gateSession = (0, import_react.useSyncExternalStore)(subscribeToNothing, hasGateSessionMarker, noGateSessionOnServer);
+	if (!user) return null;
+	const label = user.displayName ?? user.primaryEmail ?? "Account";
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "flex items-center gap-2",
+		children: [
+			user.profileImageUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+				src: user.profileImageUrl,
+				alt: "",
+				className: "h-8 w-8 rounded-full object-cover"
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20",
+				children: label.charAt(0).toUpperCase()
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "text-sm font-medium",
+				children: label
+			}),
+			!gateSession && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				disabled: signingOut,
+				onClick: () => {
+					setSigningOut(true);
+					signOut().catch(() => setSigningOut(false));
+				},
+				className: "cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline disabled:cursor-wait disabled:no-underline",
+				children: signingOut ? "Signing out…" : "Sign out"
+			})
+		]
+	});
+}
 function sliceOf(state) {
 	return {
 		laterUntil: state.laterUntil,
@@ -345,7 +466,8 @@ function sliceOf(state) {
 		whys: state.whys,
 		vibe: state.vibe,
 		grokDay: state.grokDay,
-		shelfAt: state.shelfAt
+		shelfAt: state.shelfAt,
+		watchingId: state.watchingId
 	};
 }
 function likedWeights(reviews) {
@@ -390,9 +512,21 @@ var useTaste = create()(persist((set, get) => ({
 		n: 0
 	},
 	shelfAt: 0,
+	watchingId: null,
 	last: null,
 	hydrated: false,
+	accountReady: false,
 	setHydrated: (hydrated) => set({ hydrated }),
+	applyRemote: (raw) => set({
+		...coerceTaste(raw),
+		last: null,
+		accountReady: true
+	}),
+	clearForNewAccount: () => set({
+		...emptyTaste(),
+		last: null,
+		accountReady: true
+	}),
 	setVibe: (vibe) => set({ vibe }),
 	undo: () => {
 		const last = get().last;
@@ -595,6 +729,7 @@ var useTaste = create()(persist((set, get) => ({
 			}
 		});
 	},
+	setWatching: (id) => set({ watchingId: id }),
 	markShelf: () => set({ shelfAt: Date.now() }),
 	grokLeft: () => 6 - todayCount(get().grokDay),
 	markGrok: () => {
@@ -611,24 +746,50 @@ var useTaste = create()(persist((set, get) => ({
 		if (!state.wishlist) state.wishlist = [];
 		if (!state.reviews) state.reviews = [];
 		if (!state.shelfAt) state.shelfAt = 0;
+		if (!state.watchingId) state.watchingId = null;
 		state.setHydrated(true);
 	}
 }));
+var loadTaste = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(createSsrRpc("c669be0620042e3a247f649f1ad9cb37296d8cc2cc7417fe4f783f1b155b14b6"));
+var saveTaste = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((input) => coerceTaste(input)).handler(createSsrRpc("38bb978228269d7125a651e5b859ba117cbe090d19366240ec460692f77f4c9d"));
 var SEASON_LINE = {
 	autumn: "Fall. Left means not tonight.",
 	winter: "Winter. Folk leads unless you switch.",
 	summer: "Summer. Heat and the euro films.",
 	any: "No season pushing. Rewatch is the default."
 };
+var OWNER_KEY = "tonight-owner";
 function TonightApp() {
 	const [view, setView] = (0, import_react.useState)("feed");
 	const [likeFor, setLikeFor] = (0, import_react.useState)(null);
 	const [weekNote, setWeekNote] = (0, import_react.useState)("");
 	const films = useShelf((state) => state.films);
 	const incoming = useShelf((state) => state.incoming);
+	const user = useCurrentUser();
+	const hydrated = useTaste((state) => state.hydrated);
+	const accountReady = useTaste((state) => state.accountReady);
 	(0, import_react.useEffect)(() => {
+		if (!user?.id || !hydrated) return;
 		let cancel = false;
-		listFilms().then(async (result) => {
+		(async () => {
+			const taste = await loadTaste();
+			if (cancel || !taste.ok) return;
+			const local = sliceOf(useTaste.getState());
+			const owner = localStorage.getItem(OWNER_KEY);
+			if ((!taste.found || !taste.payload || !tasteHasChoices(taste.payload)) && tasteHasChoices(local) && (!owner || owner === user.id)) {
+				useTaste.getState().applyRemote(local);
+				await saveTaste({ data: sliceOf(useTaste.getState()) });
+			} else if (taste.found && taste.payload) useTaste.getState().applyRemote(taste.payload);
+			else if (owner && owner !== user.id) {
+				useTaste.getState().clearForNewAccount();
+				await saveTaste({ data: sliceOf(useTaste.getState()) });
+			} else {
+				useTaste.getState().applyRemote(local);
+				await saveTaste({ data: sliceOf(useTaste.getState()) });
+			}
+			if (cancel) return;
+			localStorage.setItem(OWNER_KEY, user.id);
+			const result = await listFilms();
 			if (cancel || !result.ok) return;
 			const extras = useTaste.getState().extras;
 			const names = new Set([...result.films, ...result.incoming].map((film) => film.name.toLowerCase()));
@@ -645,19 +806,54 @@ function TonightApp() {
 					holding = added.incoming;
 				}
 			}
+			const banned = new Set(useTaste.getState().never);
+			const gone = [...next, ...holding].filter((work) => banned.has(work.id)).map((work) => work.id);
+			if (gone.length) {
+				const pruned = await dropFilms({ data: { ids: gone } });
+				if (pruned.ok) {
+					next = pruned.films;
+					holding = pruned.incoming;
+				}
+			}
 			if (!cancel) useShelf.getState().setCatalog(next, holding);
-			const pulled = await pullWeekly();
+			const pulled = await pullWeekly({ data: { watching: findName(useTaste.getState().watchingId ?? "") } });
 			if (cancel) return;
 			if (!pulled.ok) setWeekNote(pulled.error);
 			else {
 				setWeekNote("");
 				useShelf.getState().setCatalog(pulled.films, pulled.incoming);
 			}
-		}).catch(() => void 0);
+		})().catch(() => void 0);
 		return () => {
 			cancel = true;
 		};
-	}, []);
+	}, [user?.id, hydrated]);
+	(0, import_react.useEffect)(() => {
+		if (!user?.id || !accountReady) return;
+		let last = JSON.stringify(sliceOf(useTaste.getState()));
+		let timer = 0;
+		const unsub = useTaste.subscribe((state) => {
+			if (!state.accountReady) return;
+			const next = JSON.stringify(sliceOf(state));
+			if (next === last) return;
+			last = next;
+			window.clearTimeout(timer);
+			timer = window.setTimeout(() => {
+				saveTaste({ data: JSON.parse(next) });
+			}, 400);
+		});
+		return () => {
+			unsub();
+			window.clearTimeout(timer);
+		};
+	}, [user?.id, accountReady]);
+	if (!accountReady) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
+		className: "grid h-dvh place-items-center bg-bg text-fg",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "text-sm text-muted",
+			children: "Opening your shelf."
+		})
+	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden bg-bg text-fg lg:flex-row",
 		children: [
@@ -732,13 +928,16 @@ function Header({ view }) {
 		className: "shrink-0 px-4 pt-3 pb-2",
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex items-baseline justify-between gap-3",
+				className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 					className: "font-serif text-2xl leading-none",
 					children: "Tonight"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "text-sm text-muted tabular-nums",
-					children: [queue, " waiting"]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex items-baseline gap-3",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "text-sm text-muted tabular-nums",
+						children: [queue, " waiting"]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserButton, {})]
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -748,7 +947,8 @@ function Header({ view }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 hidden text-sm leading-normal text-muted lg:block",
 				children: "The list stays on the left. The card on the right is what to watch."
-			})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WatchingNow, {})
 		]
 	});
 }
@@ -769,6 +969,62 @@ function MoodRow() {
 				}, id))
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l from-bg to-transparent lg:hidden" })]
 		})]
+	});
+}
+function WatchingNow() {
+	const watchingId = useTaste((state) => state.watchingId);
+	const setWatching = useTaste((state) => state.setWatching);
+	const films = useShelf((state) => state.films);
+	const extras = useTaste((state) => state.extras);
+	const works = (0, import_react.useMemo)(() => mergeWorks(films, extras), [films, extras]);
+	const current = works.find((work) => work.id === watchingId);
+	const [open, setOpen] = (0, import_react.useState)(false);
+	const [query, setQuery] = (0, import_react.useState)("");
+	const needle = query.trim().toLowerCase();
+	const matches = needle ? works.filter((work) => work.name.toLowerCase().includes(needle)).slice(0, 6) : [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "mt-2",
+		children: [current && !open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "flex items-baseline justify-between gap-3",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "min-w-0 truncate text-sm",
+				children: ["Watching ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "font-medium",
+					children: current.name
+				})]
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				className: "min-h-11 shrink-0 text-sm text-muted",
+				onClick: () => setWatching(null),
+				children: "Clear"
+			})]
+		}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+			type: "button",
+			className: "min-h-11 text-sm text-muted",
+			onClick: () => setOpen((value) => !value),
+			children: open ? "Close" : "Watching now"
+		}), open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "mt-1",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+				value: query,
+				onChange: (event) => setQuery(event.target.value),
+				placeholder: "What are you in the middle of?",
+				"aria-label": "What you are watching",
+				className: "min-h-11 w-full border-b border-line bg-transparent text-sm outline-none placeholder:text-muted"
+			}), matches.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: matches.map((work) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				className: "min-h-11 w-full text-left text-sm",
+				onClick: () => {
+					setWatching(work.id);
+					setQuery("");
+					setOpen(false);
+				},
+				children: work.name
+			}) }, work.id)) }) : needle ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "py-2 text-sm text-muted",
+				children: "Nothing on the shelf by that name."
+			}) : null]
+		}) : null]
 	});
 }
 function VibeChip({ id, active }) {
@@ -797,8 +1053,10 @@ function useDeck() {
 	const current = useTaste((state) => state.current);
 	const currentAt = useTaste((state) => state.currentAt);
 	const fatigue = useTaste((state) => state.fatigue);
+	const watchingId = useTaste((state) => state.watchingId);
 	const vibe = useVibe();
 	const works = (0, import_react.useMemo)(() => mergeWorks(films, extras), [films, extras]);
+	const watching = works.find((work) => work.id === watchingId) ?? null;
 	return (0, import_react.useMemo)(() => buildDeck({
 		works,
 		demoted,
@@ -812,6 +1070,7 @@ function useDeck() {
 		currentAt,
 		fatigue,
 		vibe,
+		watching,
 		now: Date.now(),
 		key: dayKey()
 	}).deck, [
@@ -826,7 +1085,8 @@ function useDeck() {
 		current,
 		currentAt,
 		fatigue,
-		vibe
+		vibe,
+		watching
 	]);
 }
 function Deck({ onLike }) {
@@ -940,7 +1200,8 @@ function Deck({ onLike }) {
 				exclude: names,
 				recentYes: state.queue.slice(0, 6).map((item) => findName(item.id)),
 				recentNo: recentNoNames(),
-				anchors
+				anchors,
+				watching: findName(state.watchingId ?? "")
 			} });
 			if (!result.ok) setGrokError(result.error);
 			else {
@@ -1647,6 +1908,11 @@ function recentNoNames() {
 	const works = knownNow();
 	return Object.entries(laterUntil).filter(([, until]) => until > now && until < Number.MAX_SAFE_INTEGER / 2).slice(0, 8).map(([id]) => works.find((work) => work.id === id)?.name ?? "").filter(Boolean);
 }
-var SplitComponent = TonightApp;
+var SplitComponent = function Home() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignInGate, {
+		fallback: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoginPanel, {}),
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TonightApp, {})
+	});
+};
 //#endregion
 export { SplitComponent as component };

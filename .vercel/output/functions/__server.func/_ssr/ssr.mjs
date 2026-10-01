@@ -1,16 +1,20 @@
 import { r as __exportAll } from "../_runtime.mjs";
+import { t as __exportAll$1 } from "./rolldown-runtime-D7D4PA-g.mjs";
 import { A as getScriptPreloadAttrs, B as isDangerousProtocol, D as toCrossJSONStream, E as toCrossJSONAsync, F as _getRenderedMatches, G as rootRouteId, I as executeRewriteInput, K as isNotFound, L as invariant, M as resolveManifestAssetLink, N as resolveManifestCssLink, P as waitForReason, U as isRedirect, V as isPromise, W as parseRedirect, a as isSsrResponse, b as require_jsx_runtime, c as stripSsrResponseBody, i as disposeSsrResponse, j as getStylesheetHref, n as bindSsrResponseToRequest, o as normalizeSsrResponse, p as RouterProvider, q as require_react, r as defineHandlerCallback, s as replaceSsrResponse, t as renderRouterToStream, w as fromJSON } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as createServerHistory } from "../_libs/tanstack__history.mjs";
 import { a as defaultSerovalDeserializerPlugins, i as createRawStreamRPCPlugin, n as attachRouterServerSsrUtils, o as makeSerovalPlugin, r as getNormalizedURL, s as createSerializationAdapter, t as mergeHeaders } from "../_libs/@tanstack/router-core+[...].mjs";
-import { n as toResponse, t as H3Event } from "../_libs/h3-v2+rou3.mjs";
+import { n as setCookie, r as toResponse, t as H3Event } from "../_libs/h3-v2+rou3.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 //#region node_modules/.nitro/vite/services/ssr/index.js
 var ssr_exports = /* @__PURE__ */ __exportAll({
+	a: () => getServerFnById,
 	createServerEntry: () => createServerEntry,
 	default: () => server_default,
-	n: () => TSS_SERVER_FUNCTION,
-	r: () => getServerFnById,
-	t: () => createServerFn
+	i: () => TSS_SERVER_FUNCTION,
+	n: () => createMiddleware,
+	o: () => getRequest,
+	r: () => createServerFn,
+	t: () => server_exports
 });
 require_react();
 var import_jsx_runtime = require_jsx_runtime();
@@ -28,7 +32,7 @@ var globalObj$1 = globalThis;
 if (!globalObj$1[GLOBAL_EVENT_STORAGE_KEY]) globalObj$1[GLOBAL_EVENT_STORAGE_KEY] = new AsyncLocalStorage();
 var eventStorage = globalObj$1[GLOBAL_EVENT_STORAGE_KEY];
 function isPromiseLike(value) {
-	return typeof value.then === "function";
+	return (typeof value === "object" || typeof value === "function") && value !== null && typeof value.then === "function";
 }
 function getSetCookieValues(headers) {
 	const headersWithSetCookie = headers;
@@ -45,13 +49,23 @@ function mergeEventResponseHeaders(response, event) {
 	for (const cookie of responseSetCookies) response.headers.append("set-cookie", cookie);
 	for (const cookie of eventSetCookies) response.headers.append("set-cookie", cookie);
 }
-function attachResponseHeaders(value, event) {
-	if (isPromiseLike(value)) return value.then((resolved) => {
-		if (resolved instanceof Response) mergeEventResponseHeaders(resolved, event);
-		return resolved;
-	});
-	if (value instanceof Response) mergeEventResponseHeaders(value, event);
-	return value;
+function finalizeResponse(value, event) {
+	const response = ensureResponse(value);
+	mergeEventResponseHeaders(response, event);
+	return response;
+}
+function finalizeMaybeResponse(value, event) {
+	if (isPromiseLike(value)) return Promise.resolve(value).then((resolved) => finalizeResponse(resolved, event), (error) => finalizeResponse(handleResponseError(error), event));
+	return finalizeResponse(value, event);
+}
+function ensureResponse(value) {
+	if (value instanceof Response) return value;
+	return new Response("Internal Server Error", { status: 500 });
+}
+function handleResponseError(error) {
+	if (error instanceof Response) return error;
+	if (error instanceof Error) throw error;
+	return new Response("Internal Server Error", { status: 500 });
 }
 function requestHandler(handler) {
 	return (request, requestOpts) => {
@@ -65,13 +79,34 @@ function requestHandler(handler) {
 			});
 			throw error;
 		}
-		return toResponse(attachResponseHeaders(eventStorage.run({ h3Event }, () => handler(request, requestOpts)), h3Event), h3Event);
+		let response;
+		try {
+			response = eventStorage.run({ h3Event }, () => handler(request, requestOpts));
+		} catch (error) {
+			response = handleResponseError(error);
+		}
+		return toResponse(finalizeMaybeResponse(response, h3Event), h3Event);
 	};
 }
 function getH3Event() {
 	const event = eventStorage.getStore();
 	if (!event) throw new Error(`No StartEvent found in AsyncLocalStorage. Make sure you are using the function within the server runtime.`);
 	return event.h3Event;
+}
+function getRequest() {
+	return getH3Event().req;
+}
+/**
+* Set a cookie value by name.
+* @param name Name of the cookie to set
+* @param value Value of the cookie to set
+* @param options {CookieSerializeOptions} Options for serializing the cookie
+* ```ts
+* setCookie('Authorization', '1234567')
+* ```
+*/
+function setCookie$1(name, value, options) {
+	setCookie(getH3Event(), name, value, options);
 }
 function getResponse() {
 	return getH3Event().res;
@@ -87,7 +122,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-BKuQXVMy.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-CY4ixfMe.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -109,39 +144,51 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"33d43aafc33a2e01838923d81b94203e5d29d1d50d4802e6b46b8bcdc266830b": {
 		functionName: "describeLiked_createServerFn_handler",
-		importer: () => import("./grok-fns-Dnl6qJ0w.mjs")
+		importer: () => import("./grok-fns-DxEEWmoc.mjs")
+	},
+	"38bb978228269d7125a651e5b859ba117cbe090d19366240ec460692f77f4c9d": {
+		functionName: "saveTaste_createServerFn_handler",
+		importer: () => import("./taste-fns-Bcz6ygRv.mjs")
 	},
 	"3d82db6629a086bcd26f236048aab17c643bc9a5c192c89ca026e0793eb33714": {
 		functionName: "removeFilm_createServerFn_handler",
-		importer: () => import("./films-fns-D-WqQ6Sx.mjs")
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
 	},
 	"3da13f1c2786eddcde7e7740ee0d0b1246aadc4dc2fd86933d556415d2474906": {
 		functionName: "restoreFilm_createServerFn_handler",
-		importer: () => import("./films-fns-D-WqQ6Sx.mjs")
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
+	},
+	"41939bf958021b8b76a8b1ea231dcd0d35024fba6056295ed50a0f800e879971": {
+		functionName: "dropFilms_createServerFn_handler",
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
 	},
 	"5a366907efd84b4c47123901bcffdddf21c6d1ffbaa5b19b5f31787db60fe370": {
 		functionName: "addFilms_createServerFn_handler",
-		importer: () => import("./films-fns-D-WqQ6Sx.mjs")
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
 	},
 	"6de1c97ec6c07d1e326142eadaf64c3426322059b258ad4b0c4fefc0dde97cb6": {
 		functionName: "listFilms_createServerFn_handler",
-		importer: () => import("./films-fns-D-WqQ6Sx.mjs")
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
 	},
 	"82fa17bf44e0ec2de7dad75ad7edbf99e5c75f673aea3f52df84acf5a73a1a5f": {
 		functionName: "promoteFilm_createServerFn_handler",
-		importer: () => import("./films-fns-D-WqQ6Sx.mjs")
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
 	},
 	"849d378b16d7e80beed1754b1e6508b7461b9b33df8ed840b140fb78af921164": {
 		functionName: "pullWeekly_createServerFn_handler",
-		importer: () => import("./films-fns-D-WqQ6Sx.mjs")
+		importer: () => import("./films-fns-CcGc_B8C.mjs")
+	},
+	"c669be0620042e3a247f649f1ad9cb37296d8cc2cc7417fe4f783f1b155b14b6": {
+		functionName: "loadTaste_createServerFn_handler",
+		importer: () => import("./taste-fns-Bcz6ygRv.mjs")
 	},
 	"d2b01130f193a8dbc658e918123dd34a41db355305022acf7664bfe02a669321": {
 		functionName: "sharpenWhy_createServerFn_handler",
-		importer: () => import("./grok-fns-Dnl6qJ0w.mjs")
+		importer: () => import("./grok-fns-DxEEWmoc.mjs")
 	},
 	"ef8a625d68c05b2f6e299b5a3caa7e9f67df5d2c63f956a7af8c6b72e7d07441": {
 		functionName: "suggestMore_createServerFn_handler",
-		importer: () => import("./grok-fns-Dnl6qJ0w.mjs")
+		importer: () => import("./grok-fns-DxEEWmoc.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -420,10 +467,10 @@ var createServerFn = (options, __opts) => {
 		options: resolvedOptions,
 		middleware: (middleware) => {
 			const newMiddleware = [...resolvedOptions.middleware || []];
-			middleware.map((m) => {
-				if (TSS_SERVER_FUNCTION_FACTORY in m) {
-					if (m.options.middleware) newMiddleware.push(...m.options.middleware);
-				} else newMiddleware.push(m);
+			middleware.forEach((item) => {
+				if (TSS_SERVER_FUNCTION_FACTORY in item) {
+					if (item.options.middleware) newMiddleware.push(...item.options.middleware);
+				} else newMiddleware.push(item);
 			});
 			const res = createServerFn(void 0, {
 				...resolvedOptions,
@@ -465,7 +512,8 @@ var createServerFn = (options, __opts) => {
 					const serverContextAfterGlobalMiddlewares = startContext.contextAfterGlobalMiddlewares;
 					return await executeMiddleware$1(resolvedMiddleware, "server", {
 						...extractedFn,
-						...opts,
+						data: opts.data,
+						method: opts.method ?? resolvedOptions.method,
 						serverFnMeta: extractedFn.serverFnMeta,
 						context: safeObjectMerge(opts.context, serverContextAfterGlobalMiddlewares),
 						request: startContext.request
@@ -730,19 +778,23 @@ var handleServerAction = async ({ request, context, serverFnId }) => {
 		} else if (methodUpper === "GET") {
 			const payloadParam = url.searchParams.get("payload");
 			if (payloadParam && payloadParam.length > MAX_PAYLOAD_SIZE) throw new Error("Payload too large");
-			const payload = payloadParam ? fromJSON(JSON.parse(payloadParam), { plugins: serovalPlugins }) : {};
-			payload.context = safeObjectMerge(payload.context, context);
-			payload.method = methodUpper;
-			res = await action(payload);
+			const payload = payloadParam ? fromJSON(JSON.parse(payloadParam), { plugins: serovalPlugins }) : void 0;
+			res = await action({
+				data: payload?.data,
+				context: safeObjectMerge(payload?.context, context),
+				method: methodUpper
+			});
 		} else {
-			const payload = contentType?.includes("application/json") ? fromJSON(await request.json(), { plugins: serovalPlugins }) : {};
-			payload.context = safeObjectMerge(payload.context, context);
-			payload.method = methodUpper;
-			res = await action(payload);
+			const payload = contentType?.includes("application/json") ? fromJSON(await request.json(), { plugins: serovalPlugins }) : void 0;
+			res = await action({
+				data: payload?.data,
+				context: safeObjectMerge(payload?.context, context),
+				method: methodUpper
+			});
 		}
-		const unwrapped = res.result !== void 0 ? res.result : res.error;
+		const unwrapped = res.error !== void 0 ? res.error : res.result;
 		if (isNotFound(res)) res = isNotFoundResponse(res);
-		if (!isServerFn) return unwrapped;
+		if (!isServerFn && (unwrapped instanceof Response || unwrapped === null || typeof unwrapped !== "object")) return unwrapped;
 		if (unwrapped instanceof Response) {
 			if (isRedirect(unwrapped)) return unwrapped;
 			unwrapped.headers.set(X_TSS_RAW_RESPONSE, "true");
@@ -966,13 +1018,12 @@ function serializeResult(res, signal, plugins) {
 }
 function isNotFoundResponse(error) {
 	const { headers, ...rest } = error;
-	return new Response(JSON.stringify(rest), {
+	const response = new Response(JSON.stringify(rest), {
 		status: 404,
-		headers: {
-			"Content-Type": "application/json",
-			...headers || {}
-		}
+		headers
 	});
+	response.headers.set("Content-Type", "application/json");
+	return response;
 }
 var LINK_PARAM_TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 var PRELOAD_AS_VALUES = /* @__PURE__ */ new Set([
@@ -1517,7 +1568,14 @@ var ServerFunctionSerializationAdapter = createSerializationAdapter({
 	toSerializable: ({ serverFnMeta }) => ({ functionId: serverFnMeta.id }),
 	fromSerializable: ({ functionId }) => {
 		const fn = async (opts, signal) => {
-			return (await (await getServerFnById(functionId, { origin: "client" }))(opts ?? {}, signal)).result;
+			const serverFn = await getServerFnById(functionId, { origin: "client" });
+			const result = await serverFn({
+				data: opts?.data,
+				context: opts?.context,
+				method: serverFn.method ?? "GET"
+			}, signal);
+			if (result.error !== void 0) throw result.error;
+			return result.result;
 		};
 		return fn;
 	}
@@ -1535,7 +1593,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-DLsRtWtn.mjs"),
+		import("./router-CTukJzae.mjs"),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);
@@ -1932,6 +1990,20 @@ async function handleRedirectResponse(response, getRouter, signal, serializeRedi
 	}
 	return ssrResponse;
 }
+function withParsedParams(handler, matchedRoutes) {
+	if (!matchedRoutes.some((route) => route.options.params?.parse ?? route.options.parseParams)) return handler;
+	return (ctx) => {
+		const params = Object.assign(Object.create(null), ctx.params);
+		for (const route of matchedRoutes) {
+			const parse = route.options.params?.parse ?? route.options.parseParams;
+			if (parse) Object.assign(params, parse(params));
+		}
+		return handler({
+			...ctx,
+			params
+		});
+	};
+}
 async function handleServerRoutes({ getRouter, request, url, executeRouter, context, executedRequestMiddlewares }) {
 	const router = await getRouter();
 	const pathname = executeRewriteInput(router.rewrite, url).pathname;
@@ -1954,19 +2026,19 @@ async function handleServerRoutes({ getRouter, request, url, executeRouter, cont
 		const handler = requestMethod === "HEAD" ? handlers["HEAD"] ?? handlers["GET"] ?? handlers["ANY"] : handlers[requestMethod] ?? handlers["ANY"];
 		if (handler) {
 			const mayDefer = !!foundRoute.options.component;
-			if (typeof handler === "function") if (!mayDefer) {
-				terminalHandler = handler;
-				terminalNext = throwIfMayNotDefer;
-			} else routeMiddlewares.push(handler);
-			else {
+			if (typeof handler !== "function") {
 				if (handler.middleware?.length) {
 					const handlerMiddlewares = flattenMiddlewares(handler.middleware);
 					for (const m of handlerMiddlewares) routeMiddlewares.push(m.options.server);
 				}
-				if (handler.handler) if (!mayDefer) {
-					terminalHandler = handler.handler;
+			}
+			const routeHandler = typeof handler === "function" ? handler : handler.handler;
+			if (routeHandler) {
+				const parsedHandler = withParsedParams(routeHandler, matchedRoutes);
+				if (!mayDefer) {
+					terminalHandler = parsedHandler;
 					terminalNext = throwIfMayNotDefer;
-				} else routeMiddlewares.push(handler.handler);
+				} else routeMiddlewares.push(parsedHandler);
 			}
 		}
 	}
@@ -1978,6 +2050,7 @@ async function handleServerRoutes({ getRouter, request, url, executeRouter, cont
 		handlerType: "router"
 	}, request.signal, terminalNext));
 }
+var server_exports = /* @__PURE__ */ __exportAll$1({ setCookie: () => setCookie$1 });
 var fetch = createStartHandler(defaultStreamHandler);
 function createServerEntry(entry) {
 	return { async fetch(...args) {
@@ -1986,4 +2059,4 @@ function createServerEntry(entry) {
 }
 var server_default = createServerEntry({ fetch });
 //#endregion
-export { createServerEntry, server_default as default, ssr_exports as i, TSS_SERVER_FUNCTION as n, getServerFnById as r, createServerFn as t };
+export { getServerFnById as a, createServerEntry, server_default as default, TSS_SERVER_FUNCTION as i, createMiddleware as n, getRequest as o, createServerFn as r, ssr_exports as s, server_exports as t };

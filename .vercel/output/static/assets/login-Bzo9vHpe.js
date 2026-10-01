@@ -1,0 +1,1 @@
+import{n as e}from"./index-CbvJL9A2.js";import{t}from"./login-panel-CLzORPGZ.js";var n=e(),r=function(){return(0,n.jsx)(t,{})};export{r as component};

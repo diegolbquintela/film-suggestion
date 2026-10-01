@@ -1,7 +1,7 @@
-import { t as createServerFn } from "./ssr.mjs";
-import { t as createServerRpc } from "./createServerRpc-A6pJPYTF.mjs";
-import { a as VIBES, i as SEASONS, n as FAMILIES, t as FACETS } from "./facets-DOkKFDrl.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/grok-fns-Dnl6qJ0w.js
+import { r as createServerFn } from "./ssr.mjs";
+import { t as createServerRpc } from "./createServerRpc-CcvdN_gc.mjs";
+import { a as VIBES, c as authMiddleware, i as SEASONS, n as FAMILIES, t as FACETS } from "./facets-DseEWPMM.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/grok-fns-DxEEWmoc.js
 var DAILY_CAP = 12;
 var bucket = {
 	day: "",
@@ -75,7 +75,8 @@ function asSuggest(input) {
 		exclude: list(data?.exclude, 180),
 		recentYes: list(data?.recentYes, 8),
 		recentNo: list(data?.recentNo, 8),
-		anchors: list(data?.anchors, 40)
+		anchors: list(data?.anchors, 40),
+		watching: String(data?.watching ?? "").slice(0, 120)
 	};
 }
 function asWhy(input) {
@@ -134,12 +135,13 @@ var suggestMore_createServerFn_handler = createServerRpc({
 	name: "suggestMore",
 	filename: "src/lib/grok-fns.ts"
 }, (opts) => suggestMore.__executeServer(opts));
-var suggestMore = createServerFn({ method: "POST" }).validator(asSuggest).handler(suggestMore_createServerFn_handler, async ({ data }) => {
+var suggestMore = createServerFn({ method: "POST" }).validator(asSuggest).middleware([authMiddleware]).handler(suggestMore_createServerFn_handler, async ({ data }) => {
 	try {
 		const parsed = extractJson(await complete(SYSTEM, `Mood: ${data.vibe}.
 Loved anchors: ${data.anchors.join(", ")}.
 Recent yes: ${data.recentYes.join(", ") || "none"}.
 Recent not-tonight (do not treat as a permanent no): ${data.recentNo.join(", ") || "none"}.
+${data.watching ? `They are in the middle of ${data.watching}. Let one pick sit near it. Do not make the set about it.` : ""}
 Do not suggest any of these: ${data.exclude.join("; ")}.
 Return {"picks":[3 objects]} with keys name, year, kind (film|series), minutes, family (one of ${FAMILIES.join("|")}), vibes (subset of ${VIBES.join("|")}), seasons (subset of ${SEASONS.join("|")}), facets (object, keys ${FACETS.join("|")}, values 0 to 1), summary (2 sentences), why (tie to two anchors), vibeLine, preachy (0 to 1).`, 1100));
 		const taken = new Set(data.exclude.map((name) => name.toLowerCase()));
@@ -164,7 +166,7 @@ var describeLiked_createServerFn_handler = createServerRpc({
 	name: "describeLiked",
 	filename: "src/lib/grok-fns.ts"
 }, (opts) => describeLiked.__executeServer(opts));
-var describeLiked = createServerFn({ method: "POST" }).validator((input) => {
+var describeLiked = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((input) => {
 	const data = input;
 	const name = String(data?.name ?? "").trim().slice(0, 120);
 	if (name.length < 2) throw new Error("Name the film.");
@@ -201,7 +203,7 @@ var sharpenWhy_createServerFn_handler = createServerRpc({
 	name: "sharpenWhy",
 	filename: "src/lib/grok-fns.ts"
 }, (opts) => sharpenWhy.__executeServer(opts));
-var sharpenWhy = createServerFn({ method: "POST" }).validator(asWhy).handler(sharpenWhy_createServerFn_handler, async ({ data }) => {
+var sharpenWhy = createServerFn({ method: "POST" }).validator(asWhy).middleware([authMiddleware]).handler(sharpenWhy_createServerFn_handler, async ({ data }) => {
 	try {
 		const parsed = extractJson(await complete("You write one short reason a specific viewer will like a film or series. No spoilers. Name two of their anchors. JSON only: {\"why\":\"...\"}", `Title: ${data.name}. Premise: ${data.summary}. Mood tonight: ${data.vibe}. Anchors: ${data.anchors}. Two or three sentences.`, 280));
 		const why = String(parsed.why ?? "").trim();

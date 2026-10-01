@@ -2,6 +2,7 @@ import { mergeWorks, useShelf } from "@/lib/catalog";
 import { add, blend, scale, vec, type FacetVec, type Vibe, zero } from "@/lib/facets";
 import { removeFilm, restoreFilm } from "@/lib/films-fns";
 import { COOLDOWN_NO, COOLDOWN_WATCHED_LOVED, COOLDOWN_WATCHED_NEW, decayedCurrent, lifetimeVector } from "@/lib/score";
+import { coerceTaste, emptyTaste } from "@/lib/taste";
 import type { Work } from "@/lib/work";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -32,7 +33,10 @@ type Last = { label: string; slice: Slice; film?: Work };
 type TasteState = Slice & {
   last: Last | null;
   hydrated: boolean;
+  accountReady: boolean;
   setHydrated: (value: boolean) => void;
+  applyRemote: (raw: unknown) => void;
+  clearForNewAccount: () => void;
   setVibe: (vibe: Vibe) => void;
   undo: () => void;
   notTonight: (id: string) => void;
@@ -53,7 +57,7 @@ type TasteState = Slice & {
   markGrok: () => void;
 };
 
-function sliceOf(state: Slice): Slice {
+export function sliceOf(state: Slice): Slice {
   return {
     laterUntil: state.laterUntil,
     never: state.never,
@@ -122,7 +126,10 @@ export const useTaste = create<TasteState>()(
       watchingId: null,
       last: null,
       hydrated: false,
+      accountReady: false,
       setHydrated: (hydrated) => set({ hydrated }),
+      applyRemote: (raw) => set({ ...coerceTaste(raw), last: null, accountReady: true }),
+      clearForNewAccount: () => set({ ...emptyTaste(), last: null, accountReady: true }),
       setVibe: (vibe) => set({ vibe }),
       undo: () => {
         const last = get().last;

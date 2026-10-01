@@ -1738,7 +1738,7 @@ var RouterCore = class {
 	*/
 	constructor(options, getStoreConfig) {
 		this.tempLocationKey = `${Math.round(Math.random() * 1e7)}`;
-		this._scroll = { next: true };
+		this._scroll = { n: true };
 		this.subscribers = /* @__PURE__ */ new Set();
 		this._cache = /* @__PURE__ */ new Map();
 		this._committed = [];
@@ -2020,10 +2020,10 @@ var RouterCore = class {
 			this._cache.forEach(consider);
 			preloads?.forEach((matches) => matches.forEach(consider));
 			this._tx?.[3].forEach(consider);
-			const discardedPreloads = [];
+			const abort = [];
 			for (const [controller, matches] of preloads ?? []) if (matches.some((match) => invalidIds.has(match.id))) {
 				preloads.delete(controller);
-				discardedPreloads.push(controller);
+				abort.push(controller);
 			}
 			const invalidate = (d) => {
 				if (invalidIds.has(d.id)) {
@@ -2046,8 +2046,12 @@ var RouterCore = class {
 				match.invalid = true;
 				if (opts?.forcePending) match.status = "pending";
 			}
-			for (const id of invalidIds) this._flights?.delete(id);
-			for (const controller of discardedPreloads) controller.abort();
+			for (const id of invalidIds) {
+				const flight = this._flights?.get(id);
+				this._flights?.delete(id);
+				if (flight && !flight[2]) abort.push(flight[1]);
+			}
+			for (const controller of abort) controller.abort();
 			this.shouldViewTransition = false;
 			return this.load({ sync: opts?.sync });
 		};
@@ -4546,16 +4550,26 @@ var ARRAY_BUFFER_CONSTRUCTOR = (b64) => {
 	return arr.buffer;
 };
 var SERIALIZED_ARRAY_BUFFER_CONSTRUCTOR = /* @__PURE__ */ ARRAY_BUFFER_CONSTRUCTOR.toString();
+/**
+* An internal class rather than a tagged POJO: identity is checked with
+* `instanceof`, which untrusted input cannot forge (the class is not exported).
+* The eval-based `deserialize` path still rebuilds a `{__SEROVAL_SEQUENCE__…}`
+* POJO from embedded source - it has no access to this class - so a value read
+* back through `deserialize` is not an instance and, by design, is not treated
+* as a genuine Sequence on re-serialization.
+*/
+var Sequence = class {
+	constructor(values, throwAt, doneAt) {
+		this.v = values;
+		this.t = throwAt;
+		this.d = doneAt;
+	}
+};
 function isSequence(value) {
-	return "__SEROVAL_SEQUENCE__" in value;
+	return value instanceof Sequence;
 }
 function createSequence(values, throwAt, doneAt) {
-	return {
-		__SEROVAL_SEQUENCE__: true,
-		v: values,
-		t: throwAt,
-		d: doneAt
-	};
+	return new Sequence(values, throwAt, doneAt);
 }
 function createSequenceFromIterable(source) {
 	const values = [];
@@ -4571,7 +4585,9 @@ function createSequenceFromIterable(source) {
 		}
 	} catch (error) {
 		throwsAt = values.length;
+		doneAt = throwsAt;
 		values.push(error);
+		break;
 	}
 	return createSequence(values, throwsAt, doneAt);
 }
@@ -4600,11 +4616,118 @@ var SPECIAL_REF_STRING = {
 	[4]: SERIALIZED_STREAM_CONSTRUCTOR,
 	[5]: SERIALIZED_ARRAY_BUFFER_CONSTRUCTOR
 };
+function _checkPrivateRedeclaration(e, t) {
+	if (t.has(e)) throw new TypeError("Cannot initialize the same private elements twice on an object");
+}
+function _classPrivateMethodInitSpec(e, a) {
+	_checkPrivateRedeclaration(e, a), a.add(e);
+}
+function _classPrivateFieldInitSpec(e, t, a) {
+	_checkPrivateRedeclaration(e, t), t.set(e, a);
+}
+function _assertClassBrand(e, t, n) {
+	if ("function" == typeof e ? e === t : e.has(t)) return arguments.length < 3 ? t : n;
+	throw new TypeError("Private element is not present on this object");
+}
+function _classPrivateFieldGet2(s, a) {
+	return s.get(_assertClassBrand(s, a));
+}
+function _classPrivateFieldSet2(s, a, r) {
+	return s.set(_assertClassBrand(s, a), r), r;
+}
+var _buffer = /* @__PURE__ */ new WeakMap();
+var _listeners = /* @__PURE__ */ new WeakMap();
+var _alive = /* @__PURE__ */ new WeakMap();
+var _success = /* @__PURE__ */ new WeakMap();
+var _count = /* @__PURE__ */ new WeakMap();
+var _Stream_brand = /* @__PURE__ */ new WeakSet();
+/**
+* An internal class rather than a tagged POJO: identity is checked with
+* `instanceof`, which untrusted input cannot forge (the class is not exported).
+*
+* The behavior is intentionally duplicated from `STREAM_CONSTRUCTOR`. That
+* constructor's source is embedded verbatim into the eval-based `deserialize`
+* output, which has no access to this class, so the two cannot be shared. A
+* stream read back through `deserialize` is therefore a plain POJO and, by
+* design, is not treated as a genuine Stream on re-serialization. Keep the two
+* implementations in sync.
+*/
+var Stream = class {
+	constructor() {
+		_classPrivateMethodInitSpec(this, _Stream_brand);
+		_classPrivateFieldInitSpec(this, _buffer, []);
+		_classPrivateFieldInitSpec(this, _listeners, []);
+		_classPrivateFieldInitSpec(this, _alive, true);
+		_classPrivateFieldInitSpec(this, _success, false);
+		_classPrivateFieldInitSpec(this, _count, 0);
+	}
+	on(listener) {
+		let subscribed = _classPrivateFieldGet2(_alive, this);
+		let temp = 0;
+		if (subscribed) {
+			for (; temp < _classPrivateFieldGet2(_count, this); temp++) if (!_classPrivateFieldGet2(_listeners, this)[temp]) break;
+			if (temp === _classPrivateFieldGet2(_count, this)) {
+				var _this$count;
+				_classPrivateFieldSet2(_count, this, (_this$count = _classPrivateFieldGet2(_count, this), _this$count++, _this$count));
+			}
+			_classPrivateFieldGet2(_listeners, this)[temp] = listener;
+		}
+		_assertClassBrand(_Stream_brand, this, _replay).call(this, listener);
+		return () => {
+			if (_classPrivateFieldGet2(_alive, this) && subscribed) {
+				subscribed = false;
+				_classPrivateFieldGet2(_listeners, this)[temp] = void 0;
+				while (_classPrivateFieldGet2(_count, this) > 0 && !_classPrivateFieldGet2(_listeners, this)[_classPrivateFieldGet2(_count, this) - 1]) {
+					var _this$count3;
+					_classPrivateFieldSet2(_count, this, (_this$count3 = _classPrivateFieldGet2(_count, this), _this$count3--, _this$count3));
+				}
+				_classPrivateFieldGet2(_listeners, this).length = _classPrivateFieldGet2(_count, this);
+			}
+		};
+	}
+	next(value) {
+		if (_classPrivateFieldGet2(_alive, this)) {
+			_classPrivateFieldGet2(_buffer, this).push(value);
+			_assertClassBrand(_Stream_brand, this, _flush).call(this, value, "next");
+		}
+	}
+	throw(value) {
+		if (_classPrivateFieldGet2(_alive, this)) {
+			_classPrivateFieldGet2(_buffer, this).push(value);
+			_assertClassBrand(_Stream_brand, this, _flush).call(this, value, "throw");
+			_classPrivateFieldSet2(_alive, this, false);
+			_classPrivateFieldSet2(_success, this, false);
+			_classPrivateFieldGet2(_listeners, this).length = 0;
+		}
+	}
+	return(value) {
+		if (_classPrivateFieldGet2(_alive, this)) {
+			_classPrivateFieldGet2(_buffer, this).push(value);
+			_assertClassBrand(_Stream_brand, this, _flush).call(this, value, "return");
+			_classPrivateFieldSet2(_alive, this, false);
+			_classPrivateFieldSet2(_success, this, true);
+			_classPrivateFieldGet2(_listeners, this).length = 0;
+		}
+	}
+};
+function _flush(value, mode) {
+	for (let x = 0; x < _classPrivateFieldGet2(_count, this); x++) {
+		var _classPrivateFieldGet2$1;
+		(_classPrivateFieldGet2$1 = _classPrivateFieldGet2(_listeners, this)[x]) === null || _classPrivateFieldGet2$1 === void 0 || _classPrivateFieldGet2$1[mode](value);
+	}
+}
+function _replay(listener) {
+	for (let x = 0, z = _classPrivateFieldGet2(_buffer, this).length; x < z; x++) {
+		const current = _classPrivateFieldGet2(_buffer, this)[x];
+		if (!_classPrivateFieldGet2(_alive, this) && x === z - 1) listener[_classPrivateFieldGet2(_success, this) ? "return" : "throw"](current);
+		else listener.next(current);
+	}
+}
 function isStream(value) {
-	return "__SEROVAL_STREAM__" in value;
+	return value instanceof Stream;
 }
 function createStream() {
-	return STREAM_CONSTRUCTOR();
+	return new Stream();
 }
 function createStreamFromAsyncIterable(iterable, cleanups) {
 	const stream = createStream();
@@ -5110,7 +5233,7 @@ function guardIndexedValue(ctx, id) {
 	if (ctx.refs.has(id)) throw new Error("Conflicted ref id: " + id);
 }
 function isThennable(value) {
-	return !!value && typeof value === "object" && "then" in value && typeof value.then === "function";
+	return !!value && (typeof value === "object" || typeof value === "function") && "then" in value && typeof value.then === "function";
 }
 function assignIndexedValueVanilla(ctx, id, value) {
 	guardIndexedValue(ctx.base, id);
@@ -5132,8 +5255,12 @@ function deserializeKnownValue(node, record, key) {
 function deserializeReference(ctx, node) {
 	return assignIndexedValue$1(ctx, node.i, getReference(deserializeString(node.s)));
 }
+function validateNodeList(node, list) {
+	if (!Array.isArray(list)) throw new SerovalMalformedNodeError(node);
+}
 function deserializeArray(ctx, depth, node) {
 	const items = node.a;
+	validateNodeList(node, items);
 	const len = items.length;
 	const result = assignIndexedValue$1(ctx, node.i, new Array(len));
 	for (let i = 0, item; i < len; i++) {
@@ -5175,6 +5302,8 @@ function validateNodeType(ctx, node, id, type) {
 }
 function deserializeProperties(ctx, depth, node, result) {
 	const keys = node.k;
+	validateNodeList(node, keys);
+	validateNodeList(node, node.v);
 	if (keys.length > 0) for (let i = 0, vals = node.v, len = keys.length; i < len; i++) assignProperty(ctx, depth, result, keys[i], vals[i]);
 	return result;
 }
@@ -5229,11 +5358,14 @@ function deserializeRegExp(ctx, node) {
 }
 function deserializeSet(ctx, depth, node) {
 	const result = assignIndexedValue$1(ctx, node.i, /* @__PURE__ */ new Set());
+	validateNodeList(node, node.a);
 	for (let i = 0, items = node.a, len = items.length; i < len; i++) result.add(deserialize$1(ctx, depth, items[i]));
 	return result;
 }
 function deserializeMap(ctx, depth, node) {
 	const result = assignIndexedValue$1(ctx, node.i, /* @__PURE__ */ new Map());
+	validateNodeList(node, node.e.k);
+	validateNodeList(node, node.e.v);
 	for (let i = 0, keys = node.e.k, vals = node.e.v, len = keys.length; i < len; i++) result.set(deserialize$1(ctx, depth, keys[i]), deserialize$1(ctx, depth, vals[i]));
 	return result;
 }
@@ -5324,21 +5456,20 @@ function deserializePromiseFulfill(ctx, depth, node) {
 function deserializeIteratorFactoryInstance(ctx, depth, node) {
 	deserialize$1(ctx, depth, node.a[0]);
 	const source = deserialize$1(ctx, depth, node.a[1]);
-	validateNodeType(ctx, node, node.a[1].i, 35);
-	if (!source) throw new SerovalMalformedNodeError(node.a[1]);
+	if (!isSequence(source)) throw new SerovalMalformedNodeError(node.a[1]);
 	return sequenceToIterator(source);
 }
 function deserializeAsyncIteratorFactoryInstance(ctx, depth, node) {
 	deserialize$1(ctx, depth, node.a[0]);
 	const source = deserialize$1(ctx, depth, node.a[1]);
-	validateNodeType(ctx, node, node.a[1].i, 31);
-	if (!source) throw new SerovalMalformedNodeError(node.a[1]);
+	if (!isStream(source)) throw new SerovalMalformedNodeError(node.a[1]);
 	return streamToAsyncIterable(source);
 }
 function deserializeStreamConstructor(ctx, depth, node) {
 	const result = assignIndexedValue$1(ctx, node.i, createStream());
 	assignNodeType(ctx, node.i, 31);
 	const items = node.a;
+	validateNodeList(node, items);
 	const len = items.length;
 	if (len) for (let i = 0; i < len; i++) deserialize$1(ctx, depth, items[i]);
 	return result;
@@ -5376,10 +5507,15 @@ function deserializeIteratorFactory(ctx, depth, node) {
 function deserializeAsyncIteratorFactory(ctx, depth, node) {
 	deserialize$1(ctx, depth, node.a[1]);
 }
+function isSequenceIndex(value, size) {
+	return Number.isInteger(value) && value >= -1 && value < size;
+}
 function deserializeSequence(ctx, depth, node) {
+	validateNodeList(node, node.a);
+	const size = node.a.length;
+	if (!(isSequenceIndex(node.s, size) && isSequenceIndex(node.l, size))) throw new SerovalMalformedNodeError(node);
 	const result = assignIndexedValue$1(ctx, node.i, createSequence([], node.s, node.l));
-	assignNodeType(ctx, node.i, 35);
-	for (let i = 0, len = node.a.length; i < len; i++) result.v[i] = deserialize$1(ctx, depth, node.a[i]);
+	for (let i = 0; i < size; i++) result.v[i] = deserialize$1(ctx, depth, node.a[i]);
 	return result;
 }
 function deserialize$1(ctx, depth, node) {
@@ -7591,11 +7727,6 @@ function ScriptOnce({ children }) {
 	});
 }
 //#endregion
-//#region node_modules/@tanstack/react-router/dist/esm/SafeFragment.js
-function SafeFragment(props) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: props.children });
-}
-//#endregion
 //#region node_modules/@tanstack/react-router/dist/esm/renderRouteNotFound.js
 /**
 * Renders a not found component for a route when no matching route is found.
@@ -7660,37 +7791,42 @@ function MatchView({ router, match }) {
 	const routeOnCatch = route.options.onCatch ?? router.options.defaultOnCatch;
 	const routeNotFoundComponent = route.isRoot ? route.options.notFoundComponent ?? router.options.notFoundRoute?.options.component : route.options.notFoundComponent;
 	const resolvedNoSsr = match.ssr === false || match.ssr === "data-only";
-	const ResolvedSuspenseBoundary = canWrapInSuspense(router, route, match.ssr) && (route.options.wrapInSuspense ?? pendingElement ?? (route.options.errorComponent?.preload || resolvedNoSsr)) ? import_react.Suspense : SafeFragment;
-	const ResolvedCatchBoundary = routeErrorComponent ? CatchBoundary : SafeFragment;
-	const ResolvedNotFoundBoundary = routeNotFoundComponent ? CatchNotFound : SafeFragment;
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(route.isRoot ? route.options.shellComponent ?? SafeFragment : SafeFragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(matchContext.Provider, {
+	const wrapInSuspense = canWrapInSuspense(router, route, match.ssr) && (route.options.wrapInSuspense ?? pendingElement ?? (route.options.errorComponent?.preload || resolvedNoSsr));
+	let content = /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MatchInner, { match });
+	if (resolvedNoSsr) content = /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClientOnly, {
+		fallback: pendingElement,
+		children: content
+	});
+	if (routeNotFoundComponent) content = /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatchNotFound, {
+		fallback: (error) => {
+			error.routeId ??= match.routeId;
+			if (error.routeId !== match.routeId) throw error;
+			return import_react.createElement(routeNotFoundComponent, error);
+		},
+		children: content
+	});
+	if (routeErrorComponent) content = /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatchBoundary, {
+		getResetKey: () => match,
+		errorComponent: routeErrorComponent,
+		onCatch: (error, errorInfo) => {
+			if (isNotFound(error)) {
+				error.routeId ??= match.routeId;
+				throw error;
+			}
+			routeOnCatch?.(error, errorInfo);
+		},
+		children: content
+	});
+	if (wrapInSuspense) content = /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.Suspense, {
+		fallback: pendingElement,
+		children: content
+	});
+	const scrollRestoration = route.parentRoute?.id === "__root__" && router.options.scrollRestoration ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScrollRestoration, {}) : null;
+	const ShellComponent = route.isRoot ? route.options.shellComponent : void 0;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(matchContext.Provider, {
 		value: match.routeId,
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ResolvedSuspenseBoundary, {
-			fallback: pendingElement,
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ResolvedCatchBoundary, {
-				getResetKey: () => match,
-				errorComponent: routeErrorComponent,
-				onCatch: (error, errorInfo) => {
-					if (isNotFound(error)) {
-						error.routeId ??= match.routeId;
-						throw error;
-					}
-					routeOnCatch?.(error, errorInfo);
-				},
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ResolvedNotFoundBoundary, {
-					fallback: (error) => {
-						error.routeId ??= match.routeId;
-						if (error.routeId !== match.routeId) throw error;
-						return import_react.createElement(routeNotFoundComponent, error);
-					},
-					children: resolvedNoSsr ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClientOnly, {
-						fallback: pendingElement,
-						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MatchInner, { match })
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MatchInner, { match })
-				})
-			})
-		})
-	}), route.parentRoute?.id === "__root__" && router.options.scrollRestoration ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ScrollRestoration, {}) : null] });
+		children: ShellComponent ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ShellComponent, { children: [content, scrollRestoration] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [content, scrollRestoration] })
+	});
 }
 var MatchInner = import_react.memo(function MatchInnerImpl({ match }) {
 	const router = useRouter();
@@ -7778,12 +7914,8 @@ function settleOwner(owner, rendered) {
 function Matches() {
 	const router = useRouter();
 	const rootRoute = router.routesById[rootRouteId];
-	const pendingElement = renderPending(router, rootRoute);
-	const ResolvedSuspense = SafeFragment;
-	const inner = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [false, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ResolvedSuspense, {
-		fallback: pendingElement,
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MatchesInner, {})
-	})] });
+	renderPending(router, rootRoute);
+	const inner = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [false, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MatchesInner, {})] });
 	return router.options.InnerWrap ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(router.options.InnerWrap, { children: inner }) : inner;
 }
 function MatchesInner() {
@@ -7796,13 +7928,10 @@ function MatchesInner() {
 		if (acknowledgement[0] === matches) settleOwner(acknowledgement, true);
 	}, [acknowledgement, matches]);
 	const matchComponent = routeId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Match, { routeId }) : null;
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(matchContext.Provider, {
-		value: routeId,
-		children: router.options.disableGlobalCatchBoundary ? matchComponent : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatchBoundary, {
-			getResetKey: () => match,
-			onCatch: void 0,
-			children: matchComponent
-		})
+	return router.options.disableGlobalCatchBoundary ? matchComponent : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CatchBoundary, {
+		getResetKey: () => match,
+		onCatch: void 0,
+		children: matchComponent
 	});
 }
 //#endregion
@@ -8600,13 +8729,17 @@ function createHydrationScripts(nonce, initialSources) {
 //#endregion
 //#region node_modules/@tanstack/router-core/dist/esm/ssr/handlerCallback.js
 function isSsrResponse(value) {
-	return typeof value === "object" && value !== null && "response" in value && "serverSsrCleanup" in value;
+	if (typeof value !== "object" || value === null || !("response" in value) || !(value.response instanceof Response) || !("serverSsrCleanup" in value)) return false;
+	if (value.serverSsrCleanup === "none") return true;
+	return value.serverSsrCleanup === "stream" && "dispose" in value && typeof value.dispose === "function";
 }
 function normalizeSsrResponse(result) {
-	return isSsrResponse(result) ? result : {
+	if (result instanceof Response) return {
 		response: result,
 		serverSsrCleanup: "none"
 	};
+	if (isSsrResponse(result)) return result;
+	throw new TypeError("Expected a Response from the SSR handler");
 }
 function cancelResponseBody(response, reason) {
 	const body = response.body;

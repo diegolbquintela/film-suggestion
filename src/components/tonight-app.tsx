@@ -2,10 +2,14 @@ import { WorkCard } from "@/components/work-card";
 import { cn } from "@/lib/cn";
 import { mergeWorks, useShelf } from "@/lib/catalog";
 import { FAMILY_LABEL, FAMILIES, VIBE_LABEL, VIBES, type Vibe } from "@/lib/facets";
-import { addFilms, listFilms, promoteFilm, pullWeekly } from "@/lib/films-fns";
+import { addFilms, dropFilms, listFilms, promoteFilm, pullWeekly } from "@/lib/films-fns";
 import { describeLiked, sharpenWhy, suggestMore } from "@/lib/grok-fns";
+import { UserButton } from "@/lib/auth/gates";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { buildDeck, calendarSeason, dayKey, defaultVibe, type Scored } from "@/lib/score";
-import { useTaste } from "@/lib/store";
+import { sliceOf, useTaste } from "@/lib/store";
+import { tasteHasChoices } from "@/lib/taste";
+import { loadTaste, saveTaste } from "@/lib/taste-fns";
 import type { Work } from "@/lib/work";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
@@ -18,46 +22,107 @@ const SEASON_LINE: Record<string, string> = {
   any: "No season pushing. Rewatch is the default.",
 };
 
+const OWNER_KEY = "tonight-owner";
+
 export function TonightApp() {
   const [view, setView] = useState<View>("feed");
   const [likeFor, setLikeFor] = useState<string | null>(null);
   const [weekNote, setWeekNote] = useState("");
   const films = useShelf((state) => state.films);
   const incoming = useShelf((state) => state.incoming);
+  const user = useCurrentUser();
+  const hydrated = useTaste((state) => state.hydrated);
+  const accountReady = useTaste((state) => state.accountReady);
 
   useEffect(() => {
+    if (!user?.id || !hydrated) return;
     let cancel = false;
-    listFilms()
-      .then(async (result) => {
-        if (cancel || !result.ok) return;
-        const extras = useTaste.getState().extras;
-        const names = new Set(
-          [...result.films, ...result.incoming].map((film) => film.name.toLowerCase()),
-        );
-        const missing = extras.filter((work) => !names.has(work.name.toLowerCase()));
-        let next = result.films;
-        let holding = result.incoming;
-        if (missing.length) {
-          const added = await addFilms({ data: { works: missing.slice(0, 12), source: "grok" } });
-          if (added.ok) {
-            next = added.films;
-            holding = added.incoming;
-          }
+    (async () => {
+      const taste = await loadTaste();
+      if (cancel || !taste.ok) return;
+      const local = sliceOf(useTaste.getState());
+      const owner = localStorage.getItem(OWNER_KEY);
+      const remoteEmpty = !taste.found || !taste.payload || !tasteHasChoices(taste.payload);
+      const keepLocal = remoteEmpty && tasteHasChoices(local) && (!owner || owner === user.id);
+      if (keepLocal) {
+        useTaste.getState().applyRemote(local);
+        await saveTaste({ data: sliceOf(useTaste.getState()) });
+      } else if (taste.found && taste.payload) {
+        useTaste.getState().applyRemote(taste.payload);
+      } else if (owner && owner !== user.id) {
+        useTaste.getState().clearForNewAccount();
+        await saveTaste({ data: sliceOf(useTaste.getState()) });
+      } else {
+        useTaste.getState().applyRemote(local);
+        await saveTaste({ data: sliceOf(useTaste.getState()) });
+      }
+      if (cancel) return;
+      localStorage.setItem(OWNER_KEY, user.id);
+
+      const result = await listFilms();
+      if (cancel || !result.ok) return;
+      const extras = useTaste.getState().extras;
+      const names = new Set([...result.films, ...result.incoming].map((film) => film.name.toLowerCase()));
+      const missing = extras.filter((work) => !names.has(work.name.toLowerCase()));
+      let next = result.films;
+      let holding = result.incoming;
+      if (missing.length) {
+        const added = await addFilms({ data: { works: missing.slice(0, 12), source: "grok" } });
+        if (added.ok) {
+          next = added.films;
+          holding = added.incoming;
         }
-        if (!cancel) useShelf.getState().setCatalog(next, holding);
-        const pulled = await pullWeekly({ data: { watching: findName(useTaste.getState().watchingId ?? "") } });
-        if (cancel) return;
-        if (!pulled.ok) setWeekNote(pulled.error);
-        else {
-          setWeekNote("");
-          useShelf.getState().setCatalog(pulled.films, pulled.incoming);
+      }
+      const banned = new Set(useTaste.getState().never);
+      const gone = [...next, ...holding].filter((work) => banned.has(work.id)).map((work) => work.id);
+      if (gone.length) {
+        const pruned = await dropFilms({ data: { ids: gone } });
+        if (pruned.ok) {
+          next = pruned.films;
+          holding = pruned.incoming;
         }
-      })
-      .catch(() => undefined);
+      }
+      if (!cancel) useShelf.getState().setCatalog(next, holding);
+      const pulled = await pullWeekly({ data: { watching: findName(useTaste.getState().watchingId ?? "") } });
+      if (cancel) return;
+      if (!pulled.ok) setWeekNote(pulled.error);
+      else {
+        setWeekNote("");
+        useShelf.getState().setCatalog(pulled.films, pulled.incoming);
+      }
+    })().catch(() => undefined);
     return () => {
       cancel = true;
     };
-  }, []);
+  }, [user?.id, hydrated]);
+
+  useEffect(() => {
+    if (!user?.id || !accountReady) return;
+    let last = JSON.stringify(sliceOf(useTaste.getState()));
+    let timer = 0;
+    const unsub = useTaste.subscribe((state) => {
+      if (!state.accountReady) return;
+      const next = JSON.stringify(sliceOf(state));
+      if (next === last) return;
+      last = next;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void saveTaste({ data: JSON.parse(next) as ReturnType<typeof sliceOf> });
+      }, 400);
+    });
+    return () => {
+      unsub();
+      window.clearTimeout(timer);
+    };
+  }, [user?.id, accountReady]);
+
+  if (!accountReady) {
+    return (
+      <main className="grid h-dvh place-items-center bg-bg text-fg">
+        <p className="text-sm text-muted">Opening your shelf.</p>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden bg-bg text-fg lg:flex-row">
@@ -121,9 +186,12 @@ function Header({ view }: { view: View }) {
           : "All-time moves slowly. A like moves it. Drop a title if the read was wrong.";
   return (
     <header className="shrink-0 px-4 pt-3 pb-2">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h1 className="font-serif text-2xl leading-none">Tonight</h1>
-        <p className="text-sm text-muted tabular-nums">{queue} waiting</p>
+        <div className="flex items-baseline gap-3">
+          <p className="text-sm text-muted tabular-nums">{queue} waiting</p>
+          <UserButton />
+        </div>
       </div>
       <p className="mt-2 text-sm leading-normal text-muted lg:hidden">{line}</p>
       <p className="mt-2 hidden text-sm leading-normal text-muted lg:block">
