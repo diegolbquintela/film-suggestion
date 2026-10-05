@@ -28,6 +28,7 @@
     background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
+    overflow-x: hidden;
   }
 
   button:not(:disabled),

@@ -175,7 +175,7 @@ function weave(pool: Scored[], wish: Set<string>, limit: number): Scored[] {
   return out;
 }
 
-export function buildDeck(input: DeckInput): { deck: Scored[]; life: FacetVec } {
+function rankContext(input: DeckInput) {
   const works = input.works;
   const liked: Record<string, number> = {};
   for (const id of input.likedIds) liked[id] = 0.75;
@@ -189,19 +189,46 @@ export function buildDeck(input: DeckInput): { deck: Scored[]; life: FacetVec } 
   const anchors = works.filter(
     (work) => !work.hidden && !input.demoted.includes(work.id) && (work.loved || likedSet.has(work.id)),
   );
+  return { works, life, taste, season, fatigue, likedSet, wish, anchors };
+}
+
+function scoreOne(work: Work, ctx: ReturnType<typeof rankContext>, input: DeckInput): Scored {
+  const item = scoreWork(
+    work,
+    ctx.life,
+    ctx.taste,
+    input.vibe,
+    ctx.season,
+    ctx.fatigue,
+    ctx.anchors,
+    input.key,
+    input.watching,
+  );
+  if (ctx.wish.has(work.id)) {
+    item.raw += 0.12;
+    item.tonight = toScore(item.raw);
+  }
+  return item;
+}
+
+export function scoreKept(input: DeckInput, ids: string[]): Scored[] {
+  const ctx = rankContext(input);
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return ctx.works
+    .filter((work) => order.has(work.id))
+    .map((work) => scoreOne(work, ctx, input))
+    .sort((a, b) => (order.get(a.work.id) ?? 0) - (order.get(b.work.id) ?? 0));
+}
+
+export function buildDeck(input: DeckInput): { deck: Scored[]; life: FacetVec } {
+  const ctx = rankContext(input);
+  const { works, life, likedSet, wish } = ctx;
   const blocked = new Set([...input.never, ...input.queueIds]);
 
   const scored = works
     .filter((work) => !work.hidden && !blocked.has(work.id))
     .filter((work) => (input.laterUntil[work.id] ?? 0) <= input.now)
-    .map((work) => {
-      const item = scoreWork(work, life, taste, input.vibe, season, fatigue, anchors, input.key, input.watching);
-      if (wish.has(work.id)) {
-        item.raw += 0.12;
-        item.tonight = toScore(item.raw);
-      }
-      return item;
-    });
+    .map((work) => scoreOne(work, ctx, input));
 
   const discoveries = scored
     .filter((item) => !item.work.loved)

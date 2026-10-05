@@ -112,7 +112,7 @@ export function UserButton() {
           {label.charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="text-sm font-medium">{label}</span>
+      <span className="max-w-28 truncate text-sm font-medium">{label}</span>
       {authEnabled && !gateSession && (
         <button
           type="button"
@@ -122,7 +122,7 @@ export function UserButton() {
             // Success navigates away; on failure re-enable so it can be retried.
             void signOut().catch(() => setSigningOut(false));
           }}
-          className="cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline disabled:cursor-wait disabled:no-underline"
+          className="cursor-pointer text-sm text-muted underline-offset-4 hover:underline disabled:cursor-wait disabled:no-underline"
         >
           {signingOut ? "Signing out…" : "Sign out"}
         </button>

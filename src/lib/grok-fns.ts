@@ -238,3 +238,44 @@ export const sharpenWhy = createServerFn({ method: "POST" })
       return { ok: false as const, error: error instanceof Error ? error.message : "Grok didn't answer." };
     }
   });
+
+export const openWithTitles = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const raw = (input as { titles?: unknown } | null)?.titles;
+    const titles = Array.isArray(raw) ? raw.map((item) => String(item).trim().slice(0, 80)).filter((item) => item.length > 1) : [];
+    const unique: string[] = [];
+    for (const title of titles) {
+      if (unique.some((item) => item.toLowerCase() === title.toLowerCase())) continue;
+      unique.push(title);
+    }
+    if (unique.length < 3) throw new Error("Name at least three.");
+    return { titles: unique.slice(0, 5) };
+  })
+  .handler(async ({ data }) => {
+    try {
+      const text = await complete(
+        SYSTEM,
+        `A new viewer named films and series they already like: ${data.titles.join("; ")}.
+Return JSON {"anchors":[one object per title you can verify], "picks":[5 objects]}.
+Anchors must be those real, already-released titles, using the viewer's names. Skip a title only if it is not a real film or series.
+Picks are other real released films or series that sit with those anchors. Do not repeat an anchor. Not a random genre mix.
+Each object keys: name, year, kind (film|series), minutes, family (one of ${FAMILIES.join("|")}), vibes (subset of ${VIBES.join("|")}), seasons (subset of ${SEASONS.join("|")}), facets (object, keys ${FACETS.join("|")}, values 0 to 1), summary (2 sentences, no spoilers), why (for an anchor, why it is a useful taste marker; for a pick, tie it to two anchors), vibeLine, preachy (0 to 1).`,
+        1800,
+      );
+      const parsed = extractJson(text) as { anchors?: unknown[]; picks?: unknown[] };
+      const taken = new Set<string>();
+      const anchors = (parsed.anchors ?? [])
+        .map((item) => toWork(item, taken))
+        .filter((item): item is Work => Boolean(item))
+        .slice(0, 5);
+      for (const anchor of anchors) taken.add(anchor.name.toLowerCase());
+      const picks = (parsed.picks ?? [])
+        .map((item) => toWork(item, taken))
+        .filter((item): item is Work => Boolean(item))
+        .slice(0, 5);
+      if (anchors.length < 2) return { ok: false as const, error: "Those titles didn't resolve. Use the names they usually go by." };
+      return { ok: true as const, anchors, picks };
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error ? error.message : "Grok didn't answer." };
+    }
+  });

@@ -1,7 +1,7 @@
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { useState } from "react";
 
-export function LoginPanel() {
+export function LoginPanel({ onGuest }: { onGuest?: () => void }) {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,6 +77,11 @@ export function LoginPanel() {
               >
                 {mode === "up" ? "I already have an account" : "Create an account"}
               </button>
+              {onGuest ? (
+                <button type="button" className="min-h-11 w-full border border-line text-sm" onClick={onGuest}>
+                  Try it first
+                </button>
+              ) : null}
             </form>
           </div>
         ) : (

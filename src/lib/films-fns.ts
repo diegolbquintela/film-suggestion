@@ -131,6 +131,31 @@ export const addFilms = createServerFn({ method: "POST" })
     return { ok: true as const, ...(await readSplit(context.userId)) };
   });
 
+export const claimStart = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const names = Array.isArray((input as { names?: unknown } | null)?.names)
+      ? (input as { names: unknown[] }).names.map((name) => String(name).trim().toLowerCase()).filter((name) => name.length > 1).slice(0, 8)
+      : [];
+    if (names.length < 2) throw new Error("Name at least three.");
+    return { names };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    const keep = new Set(data.names);
+    const { getSql } = await import("@/lib/db");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; payload: string }>`select id, payload from films where user_id = ${context.userId}`;
+    for (const row of rows) {
+      const work = parsePayload(row.payload);
+      if (!work) continue;
+      const mine = keep.has(work.name.toLowerCase());
+      work.loved = mine;
+      work.weight = mine ? 1 : 0;
+      await sql`update films set payload = ${JSON.stringify(work)} where user_id = ${context.userId} and id = ${row.id}`;
+    }
+    return { ok: true as const, ...(await readSplit(context.userId)) };
+  });
+
 export const removeFilm = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const id = String((input as { id?: unknown } | null)?.id ?? "").trim().slice(0, 80);

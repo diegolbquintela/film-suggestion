@@ -26,6 +26,8 @@ type Slice = {
   grokDay: { day: string; n: number };
   shelfAt: number;
   watchingId: string | null;
+  started: boolean;
+  today: { key: string; vibe: string; ids: string[] } | null;
 };
 
 type Last = { label: string; slice: Slice; film?: Work };
@@ -52,6 +54,7 @@ type TasteState = Slice & {
   toggleWishlist: (id: string) => void;
   like: (id: string, note: string) => void;
   setWatching: (id: string | null) => void;
+  setToday: (today: { key: string; vibe: string; ids: string[] }) => void;
   markShelf: () => void;
   grokLeft: () => number;
   markGrok: () => void;
@@ -75,6 +78,8 @@ export function sliceOf(state: Slice): Slice {
     grokDay: state.grokDay,
     shelfAt: state.shelfAt,
     watchingId: state.watchingId,
+    started: Boolean(state.started),
+    today: state.today,
   };
 }
 
@@ -124,6 +129,8 @@ export const useTaste = create<TasteState>()(
       grokDay: { day: "", n: 0 },
       shelfAt: 0,
       watchingId: null,
+      started: false,
+      today: null,
       last: null,
       hydrated: false,
       accountReady: false,
@@ -189,14 +196,13 @@ export const useTaste = create<TasteState>()(
         const work = findWork(id, state.extras);
         if (!work) return;
         const now = Date.now();
-        const laterUntil = { ...state.laterUntil };
-        delete laterUntil[id];
+        const wait = work.loved ? COOLDOWN_WATCHED_LOVED : COOLDOWN_WATCHED_NEW;
         set({
           last: { label: `Yes · ${work.name}`, slice: sliceOf(state) },
           ...bumpCurrent(state, work, now),
-          laterUntil,
+          laterUntil: { ...state.laterUntil, [id]: now + wait },
           wishlist: state.wishlist.filter((item) => item !== id),
-          queue: [{ id, at: now }, ...state.queue.filter((item) => item.id !== id)],
+          queue: state.queue.filter((item) => item.id !== id),
         });
       },
       watched: (id) => {
@@ -282,6 +288,7 @@ export const useTaste = create<TasteState>()(
         });
       },
       setWatching: (id) => set({ watchingId: id }),
+      setToday: (today) => set({ today: { key: today.key, vibe: today.vibe, ids: today.ids.slice(0, 5) } }),
       markShelf: () => set({ shelfAt: Date.now() }),
       grokLeft: () => 6 - todayCount(get().grokDay),
       markGrok: () => {
@@ -299,6 +306,7 @@ export const useTaste = create<TasteState>()(
         if (!state.reviews) state.reviews = [];
         if (!state.shelfAt) state.shelfAt = 0;
         if (!state.watchingId) state.watchingId = null;
+        if (!state.today) state.today = null;
         state.setHydrated(true);
       },
     },

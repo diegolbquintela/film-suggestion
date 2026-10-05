@@ -18,6 +18,8 @@ export type TasteSnapshot = {
   grokDay: { day: string; n: number };
   shelfAt: number;
   watchingId: string | null;
+  started: boolean;
+  today: { key: string; vibe: string; ids: string[] } | null;
 };
 
 function strings(value: unknown, max: number): string[] {
@@ -51,6 +53,8 @@ export function emptyTaste(): TasteSnapshot {
     grokDay: { day: "", n: 0 },
     shelfAt: 0,
     watchingId: null,
+    started: false,
+    today: null,
   };
 }
 
@@ -125,6 +129,14 @@ export function coerceTaste(input: unknown): TasteSnapshot {
   }
   const vibe = VIBES.includes(row.vibe as Vibe) ? (row.vibe as Vibe) : null;
   const grok = row.grokDay as { day?: unknown; n?: unknown } | null;
+  const todayRaw = row.today as { key?: unknown; vibe?: unknown; ids?: unknown } | null;
+  const todayIds = Array.isArray(todayRaw?.ids)
+    ? todayRaw.ids.map((id) => String(id).slice(0, 80)).filter(Boolean).slice(0, 5)
+    : [];
+  const today =
+    todayRaw && String(todayRaw.key ?? "") && todayIds.length
+      ? { key: String(todayRaw.key).slice(0, 20), vibe: String(todayRaw.vibe ?? "").slice(0, 20), ids: todayIds }
+      : null;
   return {
     laterUntil,
     never: strings(row.never, 400),
@@ -145,5 +157,7 @@ export function coerceTaste(input: unknown): TasteSnapshot {
     },
     shelfAt: typeof row.shelfAt === "number" ? row.shelfAt : 0,
     watchingId: row.watchingId ? String(row.watchingId).slice(0, 80) : null,
+    started: row.started === true,
+    today,
   };
 }
