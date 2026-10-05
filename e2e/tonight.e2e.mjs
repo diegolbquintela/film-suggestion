@@ -47,13 +47,42 @@ test("signed-in today is five buttons, then saved keeps the note", async () => {
     await page.locator("ul button").nth(4).waitFor();
     assert.deepEqual(await page.locator("ul button").allInnerTexts(), firstDay);
 
-    const passed = (await page.locator("ul button").first().innerText()).split("\n")[0];
+    const rowText = await page.locator("ul button").first().innerText();
+    const passed = rowText.split("\n")[0];
+    const year = rowText.match(/\d{4}/);
+    assert.ok(year, rowText);
     await page.locator("ul button").first().click();
     await page.getByRole("heading", { level: 1, name: passed }).waitFor();
-    const score = Number(await page.locator("article p").first().innerText());
+    const score = Number(await page.locator("article p.font-serif").first().innerText());
     assert.equal(Number.isInteger(score), true);
     assert.ok(score >= 12 && score <= 97);
+    assert.equal(await page.locator("article").getByText("Tonight", { exact: true }).count(), 1);
     assert.equal(await page.getByText("All-time").count(), 0);
+    const cardText = await page.locator("article").innerText();
+    assert.ok(cardText.includes(year[0]));
+    for (const label of ["Director", "Cast", "Genre"]) {
+      assert.equal(await page.locator("article dt", { hasText: new RegExp(`^${label}$`) }).count(), 1);
+    }
+    const fact = async (label) =>
+      (
+        await page
+          .locator("article div")
+          .filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) })
+          .locator("dd")
+          .innerText()
+      ).trim();
+    assert.ok((await fact("Genre")).length > 1);
+    if (passed !== "The Plantagenets" && passed !== "Woody Allen") {
+      assert.ok((await fact("Cast")).length > 1);
+    }
+    for (const label of ["Google", "IMDb", "Rotten Tomatoes"]) {
+      const term = page.locator("article dt", { hasText: new RegExp(`^${label}$`) });
+      if ((await term.count()) === 0) continue;
+      const value = (await term.locator("xpath=following-sibling::dd[1]").innerText()).trim();
+      assert.match(value, /^(?:\d{1,3}%|\d{1,2}(?:\.\d)?)$/);
+    }
+    assert.equal(await page.locator("article").getByText("N/A", { exact: true }).count(), 0);
+    assert.equal(await page.locator("article").getByText("Unknown", { exact: true }).count(), 0);
     assert.equal(await page.getByText("Not tonight", { exact: true }).count(), 1);
     const title = getComputedStyleWait(page);
     const colors = await title;
